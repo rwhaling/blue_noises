@@ -46,10 +46,10 @@ let NOISE_AMPLITUDE = 0.5;
 let NOISE_SPEED = 0.8;          // Speed for displacement noise
 let NOISE_SCALE = 1.0;
 let NOISE_OFFSET_SCALE = 0.7;
-const GRID_SCALE = 4.0;
-const GRID_ROTATION = 0.0;
-const GRID_AXIS_SCALE = [2.0, 1.0];
-const GRID_WAVE_SPEED = 0.1;      // EDIT: Added constant for sine wave speed
+let GRID_SCALE = 4.0;
+let GRID_ROTATION = 0.0;
+let GRID_AXIS_SCALE = [2.0, 1.0];
+let GRID_WAVE_SPEED = 0.1;      // EDIT: Added constant for sine wave speed
 
 // Keep gradient wave parameters
 let WAVE_AMPLITUDE = 1.2;
@@ -430,6 +430,60 @@ export function start(contexts: CanvasContexts) {
     const renderButton = document.querySelector('#render-button');
     renderButton?.addEventListener('click', startRendering);
     
+    // --- SLIDER SETUP ---
+    const noiseAmpSlider = document.getElementById('noise-amplitude-slider') as HTMLInputElement;
+    const noiseAmpValueSpan = document.getElementById('noise-amplitude-value');
+    const noiseScaleSlider = document.getElementById('noise-scale-slider') as HTMLInputElement;
+    const noiseScaleValueSpan = document.getElementById('noise-scale-value');
+    const gridScaleSlider = document.getElementById('grid-scale-slider') as HTMLInputElement;
+    const gridScaleValueSpan = document.getElementById('grid-scale-value');
+    const gridWaveSpeedSlider = document.getElementById('grid-wave-speed-slider') as HTMLInputElement;
+    const gridWaveSpeedValueSpan = document.getElementById('grid-wave-speed-value');
+
+    // --- Toggle Controls Button Setup ---
+    const toggleBtn = document.getElementById('toggle-controls-button') as HTMLButtonElement;
+    const sliderContainer = document.getElementById('slider-container'); // Get container too
+
+    if (toggleBtn && sliderContainer) {
+        toggleBtn.addEventListener('click', () => {
+            const isCollapsed = sliderContainer.classList.toggle('collapsed');
+            toggleBtn.textContent = isCollapsed ? 'Show Controls' : 'Hide Controls';
+        });
+    }
+    // --- End Toggle Controls Button Setup ---
+
+    if (noiseAmpSlider && noiseAmpValueSpan) {
+        noiseAmpSlider.addEventListener('input', (e) => {
+            const sliderValue = parseFloat((e.target as HTMLInputElement).value);
+            NOISE_AMPLITUDE = sliderValue / 100.0;
+            noiseAmpValueSpan.textContent = NOISE_AMPLITUDE.toFixed(2);
+        });
+    }
+    if (noiseScaleSlider && noiseScaleValueSpan) {
+        noiseScaleSlider.addEventListener('input', (e) => {
+            const sliderValue = parseFloat((e.target as HTMLInputElement).value);
+            const s = sliderValue / 100.0;
+            NOISE_SCALE = 1.0 + s * s * 63.0; // Quadratic scale 1.0 -> 64.0
+            noiseScaleValueSpan.textContent = NOISE_SCALE.toFixed(2);
+        });
+    }
+    if (gridScaleSlider && gridScaleValueSpan) {
+        gridScaleSlider.addEventListener('input', (e) => {
+            const sliderValue = parseFloat((e.target as HTMLInputElement).value);
+            const s = sliderValue / 100.0;
+            GRID_SCALE = 1.0 + s * s * 63.0; // Quadratic scale 1.0 -> 64.0
+            gridScaleValueSpan.textContent = GRID_SCALE.toFixed(2);
+        });
+    }
+    if (gridWaveSpeedSlider && gridWaveSpeedValueSpan) {
+        gridWaveSpeedSlider.addEventListener('input', (e) => {
+            const sliderValue = parseFloat((e.target as HTMLInputElement).value);
+            GRID_WAVE_SPEED = sliderValue / 100.0;
+            gridWaveSpeedValueSpan.textContent = GRID_WAVE_SPEED.toFixed(2);
+        });
+    }
+    // --- END SLIDER SETUP ---
+
     setup(contexts);
     animate();
 }

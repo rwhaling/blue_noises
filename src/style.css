@@ -5,22 +5,41 @@ html, body {
   overflow: auto; /* Keep browser scrolling enabled */
   background-color: #1B1B1B; /* Off-black background color */
   color: #f5f5f5; /* Lighter text color for better contrast with dark background */
+  display: flex; /* Use flexbox for body */
+  justify-content: center; /* Center #app horizontally */
+  align-items: flex-start; /* Align #app to the top */
+}
+
+#app {
+  width: fit-content; /* Allow app to size based on content */
+}
+
+/* New style for the main layout container */
+#main-layout {
+  display: flex;
+  justify-content: center; /* Center items if they don't fill space */
+  align-items: flex-start; /* Align items to the top */
+  gap: 30px; /* Space between canvas and sliders */
+  margin: 40px auto 0; /* Top margin, centered */
 }
 
 #canvas-container {
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  width: 100%;
-  position: relative;
-  margin: 40px auto 0;
-  margin-bottom: 40px;
+  /* display: flex; */ /* No longer needed */
+  /* justify-content: center; */ /* No longer needed */
+  /* align-items: flex-start; */ /* No longer needed */
+  width: 600px; /* Explicit size for canvas area */
+  height: 600px;
+  position: relative; /* Keep for absolute canvas positioning */
+  /* margin: 40px auto 0; */ /* Removed margin, handled by main-layout */
+  /* margin-bottom: 40px; */ /* Removed margin */
 }
 
 #canvas-2d, #canvas-webgl {
   position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+  /* left: 50%; */ /* Removed */
+  /* transform: translateX(-50%); */ /* Removed */
+  left: 0; /* Position relative to #canvas-container */
+  top: 0;  /* Position relative to #canvas-container */
 }
 
 #canvas-2d {
@@ -32,12 +51,15 @@ html, body {
 }
 
 #button-container {
-  position: absolute;
-  top: 680px; /* 40px initial margin + 600px canvas height + 40px spacing */
-  left: 0;
-  width: 100%;
+  /* position: absolute; */ /* Removed */
+  /* top: 680px; */ /* Removed */
+  /* left: 0; */ /* Removed */
+  width: 100%; /* Take full width for centering */
   display: flex;
   justify-content: center;
+  /* margin-bottom: 20px; */ /* Removed specific margin */
+  margin-top: 30px; /* Space below the main layout */
+  margin-bottom: 40px; /* Space at the very bottom */
 }
 
 #render-button {
@@ -57,4 +79,101 @@ html, body {
 
 #render-button:active {
   background-color: #247683;
+}
+
+#slider-container {
+  /* position: absolute; */ /* Removed */
+  /* top: 740px; */ /* Removed */
+  /* left: 50%; */ /* Removed */
+  /* transform: translateX(-50%); */ /* Removed */
+  /* width: 80%; */ /* Removed */
+  /* max-width: 800px; */ /* Removed */
+  width: 200px; /* Set a fixed width for the slider column */
+  display: flex;
+  flex-direction: column; /* Stack button and wrapper vertically */
+  justify-content: flex-start;
+  align-items: stretch; /* Stretch items */
+  gap: 15px; /* Adjusted gap for button spacing */
+  padding: 15px;
+  background-color: rgba(40, 40, 40, 0.8);
+  border-radius: 5px;
+  /* margin-bottom: 40px; */ /* Removed margin */
+  height: fit-content;
+  transition: width 0.3s ease; /* Add transition for width change */
+}
+
+/* Style for the toggle button */
+#toggle-controls-button {
+  background-color: #4a4a4a;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  font-size: 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  margin-bottom: 5px; /* Space below button when sliders shown */
+}
+
+#toggle-controls-button:hover {
+  background-color: #5a5a5a;
+}
+
+/* Wrapper for the actual sliders */
+#slider-groups-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 20px; /* Keep the gap between individual sliders */
+  align-items: stretch;
+  overflow: hidden; /* Hide content when collapsing */
+  transition: max-height 0.3s ease-out, opacity 0.3s ease-out; /* Smooth collapse */
+  max-height: 1000px; /* Set a large max-height for shown state */
+  opacity: 1;
+}
+
+/* Styles when sliders are hidden */
+#slider-container.collapsed #slider-groups-wrapper {
+  max-height: 0;
+  opacity: 0;
+  gap: 0; /* Remove gap when hidden */
+  padding: 0; /* Remove padding when hidden */
+  margin: 0; /* Remove margin when hidden */
+}
+
+#slider-container.collapsed {
+   width: auto; /* Allow container to shrink to button width */
+   gap: 0; /* Remove gap in container when collapsed */
+}
+
+#slider-container.collapsed #toggle-controls-button {
+   margin-bottom: 0; /* No margin below button when collapsed */
+}
+
+.slider-group {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch; /* Stretch items within the group */
+  color: #f0f0f0;
+  font-size: 0.9em;
+}
+
+.slider-group label {
+  margin-bottom: 8px; /* More space below label */
+  text-align: left;
+}
+
+.slider-group input[type="range"] {
+  width: 100%; /* Make slider fill the width */
+  cursor: pointer;
+}
+
+.slider-group span {
+  margin-top: 8px; /* More space above value */
+  font-family: monospace;
+  min-width: 40px;
+  text-align: center;
+  background-color: #333;
+  padding: 3px 6px; /* Slightly larger padding */
+  border-radius: 3px;
+  align-self: center; /* Center the value display */
 }
