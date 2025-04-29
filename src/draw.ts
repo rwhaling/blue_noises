@@ -1,623 +1,378 @@
 import passthroughVertexShader from './shaders/passthrough.vert?raw'
-import blurFragmentShader from './shaders/gaussianBlur.frag?raw'
 import simpleGradientFragmentShader from './shaders/simplegradient.frag?raw'
-import compositeFragmentShader from './shaders/composite.frag?raw'
-import fadeFragmentShader from './shaders/fade.frag?raw'
+import gridGradientFragmentShader from './shaders/gridgradient.frag?raw'
+import spectralCompositeFragmentShader from './shaders/spectralComposite.frag?raw'
+import blurFragmentShader from './shaders/gaussianBlur.frag?raw'
 
 let frameCount = 0
-// Add mouse position tracking
-let mouseX = 0
-let mouseY = 0
-let rectX = 100
-let rectY = 100
-let dx = 1
-let dy = 1
 
-// Add these at the top of the file
-let gl: WebGLRenderingContext | null = null;
-let program: WebGLProgram | null = null;
-let frameTexture: WebGLTexture | null = null;
-let framebuffer: WebGLFramebuffer | null = null;
-let tempTexture: WebGLTexture | null = null;
-let positionBuffer: WebGLBuffer | null = null; // Make global
-let texCoordBuffer: WebGLBuffer | null = null; // Make global
+// Keep essential WebGL globals - remove | null
+let gl: WebGLRenderingContext; // Changed
+let frameTexture: WebGLTexture; // Changed
+let framebuffer: WebGLFramebuffer; // Changed
+let positionBuffer: WebGLBuffer; // Changed
+let texCoordBuffer: WebGLBuffer; // Changed
 
-// Add time tracking variable at the top of the file with other globals
+// --- Step 3: Re-introduce Canvas Globals ---
+let elementsCanvas: HTMLCanvasElement;
+let elementsCtx: CanvasRenderingContext2D;
+
+// --- Step 4: Add Element Texture Globals ---
+let elementsTexture: WebGLTexture; // Texture for 2D canvas drawing
+let blurredElementsTexture: WebGLTexture; // Texture for blurred elements
+let tempBlurTexture: WebGLTexture; // Temp texture for blur ping-pong
+
+// --- Step 5: Add Blur Framebuffer Global ---
+let blurFramebuffer: WebGLFramebuffer; // FBO for blur passes
+
+// Keep time tracking
 let startTime = Date.now();
+let FRAMES_PER_SECOND = 60;
 
-// Add these variables at the top with other globals
-let leftCircleY = 600;  // Position for the red circle
-let rightCircleY = 400; // Position for the orange circle
-let leftDY = 2;      // Movement speed/direction for left circle
-let rightDY = -2;    // Movement speed/direction for right circle
-
-// Add these near the top with other state variables
+// Add back rendering state variables
 let isRendering = false;
 let currentFrameNumber = 0;
 let dirHandle: FileSystemDirectoryHandle | null = null;
-const TOTAL_FRAMES = 2880;
-const FRAMES_PER_SECOND = 24;
+const TOTAL_FRAMES = 5550; // Example value, adjust as needed
 
-// Add this global for the blur output texture (at the top with other globals)
-let blurOutputTexture: WebGLTexture | null = null;
+// --- Step 2: Add Blur Parameters ---
+const BLUR_RADIUS = 1.0; // Example blur radius
+const BLUR_PASSES = 0;   // Example blur passes
 
-// Add these for the fading trail
-let circleTrailTexA: WebGLTexture | null = null;
-let circleTrailTexB: WebGLTexture | null = null;
-let trailFramebuffer: WebGLFramebuffer | null = null;
-let fadeProgram: WebGLProgram | null = null;
-let drawTextureProgram: WebGLProgram | null = null; // Program to just draw a texture
-let readTrailTex: WebGLTexture | null = null;
-let writeTrailTex: WebGLTexture | null = null;
-const FADE_AMOUNT = 0.04; // Adjust for faster/slower fade (0.0 to 1.0)
-
-// Add these globals at the top with other state variables
-let BLUR_RADIUS = 1.0;         // Default blur radius, can be changed at runtime
-let BLUR_PASSES = 1;           // Number of blur passes, can be changed at runtime
-
-let NOISE_CENTER = 0.5;
-let NOISE_WIDTH = 0.65;
+// Keep gradient noise parameters
+let NOISE_CENTER = 0.4;
+let NOISE_WIDTH = 0.55;
 let NOISE_AMPLITUDE = 0.5;
-let NOISE_SPEED = 0.1;
-let NOISE_SCALE = 64.0;
+let NOISE_SPEED = 0.8;          // Speed for displacement noise
+let NOISE_SCALE = 1.0;
 let NOISE_OFFSET_SCALE = 0.7;
+const GRID_SCALE = 4.0;
+const GRID_ROTATION = 0.0;
+const GRID_AXIS_SCALE = [2.0, 1.0];
+const GRID_WAVE_SPEED = 0.1;      // EDIT: Added constant for sine wave speed
 
-let WAVE_AMPLITUDE = 0.45;
-let WAVE_XSCALE = 1.4;      // NEW: x scale for the wave
+// Keep gradient wave parameters
+let WAVE_AMPLITUDE = 1.2;
+let WAVE_XSCALE = 0.1;      // NEW: x scale for the wave
 let WAVE_TIMESCALE = 0.1;   // NEW: time scale for the wave
 
-// let GRADIENT_COLOR_A = '#1C1726'; 
-// let GRADIENT_COLOR_B = '#351286';
-// let CIRCLE_COLOR = '#C95792';
-
-// peach/purple, gorgeous
-let GRADIENT_COLOR_A = '#F8B55F';  
-let GRADIENT_COLOR_B = '#C95792';
-// let CIRCLE_COLOR = '#7C4585'; // dark purple
-// let CIRCLE_COLOR = '#0A5EB0'; // dark blue (navy)
-// let CIRCLE_COLOR = '#FFCFEF'; // very light pink
-let BIG_CIRCLE_COLOR = '#6A1E55'; // nice maroon
-// let CIRCLE_COLOR = '#B4D6CD'; // light minty blue-green
-// let CIRCLE_COLOR = '#0B8494'; // turquoisey navy
-// let CIRCLE_COLOR = '#C75B7A'; // mellow maroon, blends nicely
-// let CIRCLE_COLOR = '#E9FF97'; // day glow yellow, kinda insane
-// let CIRCLE_COLOR = '#E72929'; // bold red
-let CIRCLE_COLOR = '#F7EFE5'; // eggshell white
-
-// Add these for multiple circles
-
-let NUM_CIRCLES = 9; // Example: Draw 5 circles
-let CIRCLE_SPACING = 87; // Example: Time delay between circles in frames (adjust as needed)
-
-// Add this helper function for zero-padding
+// Palette Colors
+let GRADIENT_COLOR_A = '#AED4596'; // Base Color AED4596
+let GRADIENT_COLOR_B = '#33E6DA'; // Base Color B
+// --- Step 1: Add New Color Constants ---
+const PALETTE_COLOR_C = '#FFFFFF'; // Color for opaque black elements
+const PALETTE_COLOR_D = '#3734DA'; // Color for opaque white elements (unused for now)
+// 33E6DA
+// 3734DA
+// A145ED
+// Add back frame padding helper
 function padFrameNumber(num: number): string {
     return num.toString().padStart(6, '0');
 }
 
-// Add these shader sources
+// Keep passthrough vertex shader source
 const vertexShaderSource = passthroughVertexShader;
-const fragmentShaderSource = blurFragmentShader;
 
-// Simple fragment shader to just draw a texture
-const drawTextureFragmentShaderSource = `
-precision mediump float;
-uniform sampler2D u_image;
-uniform float u_flipY; // Use 1.0 for drawing to screen, 0.0 for FBO
-varying vec2 v_texCoord;
-void main() {
-  // Flip Y coord if drawing to screen (WebGL origin is bottom-left)
-  vec2 uv = v_texCoord;
-  uv.y = mix(uv.y, 1.0 - uv.y, u_flipY);
-  gl_FragColor = texture2D(u_image, uv);
-}
-`;
-
-// Add these at the top with other globals
-let gradientProgram: WebGLProgram | null = null;
-let blurProgram: WebGLProgram | null = null;
-let compositeProgram: WebGLProgram | null = null;
-
-// Add these new variables at the top with other globals
-let circlesCanvas: HTMLCanvasElement;
-let circlesCtx: CanvasRenderingContext2D | null = null;
-
-// Helper to convert hex to [r, g, b] in 0..1
-function hexToRgb01(hex: string): [number, number, number] {
-    const n = parseInt(hex.replace('#', ''), 16);
-    return [
-        ((n >> 16) & 0xff) / 255,
-        ((n >> 8) & 0xff) / 255,
-        (n & 0xff) / 255
-    ];
-}
-
-// Add these globals at the top with other state variables
-let TRAIL_BLUR_RADIUS = 1; // Configurable blur radius for the trail
-let TRAIL_BLUR_PASSES = 2;   // Number of blur passes for the trail
-let trailBlurTempTex: WebGLTexture | null = null; // Temporary texture for trail blur
+// Keep gradient program, add blur program, rename palette to spectralComposite
+let gradientProgram: WebGLProgram; // Changed
+let blurProgram: WebGLProgram;
+let spectralCompositeProgram: WebGLProgram; // Changed name
 
 function initWebGL(canvas: HTMLCanvasElement) {
-    gl = canvas.getContext('webgl', { 
+    const localGl = canvas.getContext('webgl', {
         alpha: true,
-        preserveDrawingBuffer: true  // Add this option
+        preserveDrawingBuffer: true
     });
-    if (!gl) {
+    if (!localGl) {
         throw new Error('WebGL not supported');
     }
+    gl = localGl;
 
-    // Create shader program
-    const vertexShader = gl.createShader(gl.VERTEX_SHADER)!;
-    gl.shaderSource(vertexShader, vertexShaderSource);
-    gl.compileShader(vertexShader);
-
-    const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER)!;
-    gl.shaderSource(fragmentShader, fragmentShaderSource);
-    gl.compileShader(fragmentShader);
-
-    program = gl.createProgram()!;
-    gl.attachShader(program, vertexShader);
-    gl.attachShader(program, fragmentShader);
-    gl.linkProgram(program);
-    gl.useProgram(program);
-    blurProgram = program;
-
-    // Enable standard alpha blending
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-    // Set up position attribute
-    const positions = new Float32Array([
-        -1, -1,
-        1, -1,
-        -1, 1,
-        1, 1,
-    ]);
+    // --- Create Buffers ---
+    const positions = new Float32Array([ -1, -1, 1, -1, -1, 1, 1, 1 ]);
     positionBuffer = gl.createBuffer();
+    if (!positionBuffer) throw new Error("Failed to create position buffer");
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
-    const positionLocation = gl.getAttribLocation(blurProgram, "a_position");
-    gl.enableVertexAttribArray(positionLocation);
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer); // Bind before pointer
-    gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
 
-    // Set up texture coordinate attribute (standard mapping)
-    const texCoords = new Float32Array([
-        0, 0,
-        1, 0,
-        0, 1,
-        1, 1,
-    ]);
+    const texCoords = new Float32Array([ 0, 0, 1, 0, 0, 1, 1, 1 ]);
     texCoordBuffer = gl.createBuffer();
+    if (!texCoordBuffer) throw new Error("Failed to create texCoord buffer");
     gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, texCoords, gl.STATIC_DRAW);
-    const texCoordLocation = gl.getAttribLocation(blurProgram, "a_texCoord");
-    gl.enableVertexAttribArray(texCoordLocation);
-    gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer); // Bind before pointer
-    gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
 
-    // Create and set up texture
+    // --- Create Textures (Step 7) ---
     frameTexture = gl.createTexture();
+    if (!frameTexture) throw new Error("Failed to create frameTexture");
     gl.bindTexture(gl.TEXTURE_2D, frameTexture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
-    // Create temporary texture for multi-pass rendering
-    tempTexture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, tempTexture);
+    elementsTexture = gl.createTexture(); // New
+    if (!elementsTexture) throw new Error("Failed to create elementsTexture");
+    gl.bindTexture(gl.TEXTURE_2D, elementsTexture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, canvas.width, canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 
-    // Create framebuffer
-    framebuffer = gl.createFramebuffer();
+    blurredElementsTexture = gl.createTexture(); // New
+    if (!blurredElementsTexture) throw new Error("Failed to create blurredElementsTexture");
+    gl.bindTexture(gl.TEXTURE_2D, blurredElementsTexture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
-    // After creating tempTexture, also create blurOutputTexture
-    blurOutputTexture = gl!.createTexture();
-    gl!.bindTexture(gl!.TEXTURE_2D, blurOutputTexture);
-    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_WRAP_S, gl!.CLAMP_TO_EDGE);
-    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_WRAP_T, gl!.CLAMP_TO_EDGE);
-    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_MIN_FILTER, gl!.LINEAR);
-    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_MAG_FILTER, gl!.LINEAR);
-    gl!.texImage2D(gl!.TEXTURE_2D, 0, gl!.RGBA, canvas.width, canvas.height, 0, gl!.RGBA, gl!.UNSIGNED_BYTE, null);
+    tempBlurTexture = gl.createTexture(); // New
+    if (!tempBlurTexture) throw new Error("Failed to create tempBlurTexture");
+    gl.bindTexture(gl.TEXTURE_2D, tempBlurTexture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+    // --- Create Framebuffers (Step 7) ---
+    framebuffer = gl.createFramebuffer(); // For gradient pass
+    if (!framebuffer) throw new Error("Failed to create framebuffer");
+
+    blurFramebuffer = gl.createFramebuffer(); // New: For blur passes
+    if (!blurFramebuffer) throw new Error("Failed to create blurFramebuffer");
+
+
+    // --- Initial Allocation ---
+    // Will be done in setup based on actual canvas size
+    gl.bindTexture(gl.TEXTURE_2D, null); // Unbind texture
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); // Ensure we start unbound
 }
 
-export function setup({ canvas2d, canvasWebGL }: CanvasContexts) {
-    const ctx = canvas2d.getContext('2d');
-    if (!ctx) {
-        throw new Error('Failed to get 2D context');
-    }
-    
+export function setup({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
     initWebGL(canvasWebGL);
-    
-    ctx.fillRect(0, 0, canvas2d.width, canvas2d.height);
-    
-    // Add mouse move event listener to the WebGL canvas instead
-    canvasWebGL.addEventListener('mousemove', (event) => {
-        const rect = canvasWebGL.getBoundingClientRect()
-        mouseX = event.clientX - rect.left
-        mouseY = event.clientY - rect.top
-        // Calculate vector FROM mouse TO rectangle instead
-        dx = rectX - mouseX
-        dy = rectY - mouseY
-    })
 
-    // Call this after initWebGL in setup()
-    initGradientProgram(gl!);
-    initCompositeProgram(gl!);
-    initFadeProgram(gl!);
-    initDrawTextureProgram(gl!);
+    // --- Step 8: Create elements canvas and context ---
+    elementsCanvas = document.createElement('canvas');
+    elementsCanvas.width = canvasWebGL.width;
+    elementsCanvas.height = canvasWebGL.height;
+    const localCtx = elementsCanvas.getContext('2d');
+    if (!localCtx) {
+        throw new Error("Failed to get 2D context for elements canvas");
+    }
+    elementsCtx = localCtx;
 
-    // Create offscreen canvas for circles
-    circlesCanvas = document.createElement('canvas');
-    circlesCanvas.width = canvas2d.width;
-    circlesCanvas.height = canvas2d.height;
-    circlesCtx = circlesCanvas.getContext('2d');
+    // --- Step 8: Allocate Textures ---
+    gl.bindTexture(gl.TEXTURE_2D, frameTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, canvasWebGL.width, canvasWebGL.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 
-    // Create textures for the fading trail
-    circleTrailTexA = gl!.createTexture();
-    gl!.bindTexture(gl!.TEXTURE_2D, circleTrailTexA);
-    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_WRAP_S, gl!.CLAMP_TO_EDGE);
-    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_WRAP_T, gl!.CLAMP_TO_EDGE);
-    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_MIN_FILTER, gl!.LINEAR);
-    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_MAG_FILTER, gl!.LINEAR);
+    gl.bindTexture(gl.TEXTURE_2D, elementsTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, canvasWebGL.width, canvasWebGL.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 
-    circleTrailTexB = gl!.createTexture();
-    gl!.bindTexture(gl!.TEXTURE_2D, circleTrailTexB);
-    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_WRAP_S, gl!.CLAMP_TO_EDGE);
-    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_WRAP_T, gl!.CLAMP_TO_EDGE);
-    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_MIN_FILTER, gl!.LINEAR);
-    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_MAG_FILTER, gl!.LINEAR);
+    gl.bindTexture(gl.TEXTURE_2D, blurredElementsTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, canvasWebGL.width, canvasWebGL.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 
-    // Create framebuffer for trail rendering
-    trailFramebuffer = gl!.createFramebuffer();
+    gl.bindTexture(gl.TEXTURE_2D, tempBlurTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, canvasWebGL.width, canvasWebGL.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 
-    // Set initial read/write textures
-    readTrailTex = circleTrailTexA;
-    writeTrailTex = circleTrailTexB;
+    gl.bindTexture(gl.TEXTURE_2D, null); // Unbind
 
-    // Initialize the temporary texture for trail blurring
-    trailBlurTempTex = gl!.createTexture();
-    gl!.bindTexture(gl!.TEXTURE_2D, trailBlurTempTex);
-    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_WRAP_S, gl!.CLAMP_TO_EDGE);
-    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_WRAP_T, gl!.CLAMP_TO_EDGE);
-    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_MIN_FILTER, gl!.LINEAR);
-    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_MAG_FILTER, gl!.LINEAR);
-    gl!.texImage2D(gl!.TEXTURE_2D, 0, gl!.RGBA, canvasWebGL.width, canvasWebGL.height, 0, gl!.RGBA, gl!.UNSIGNED_BYTE, null);
+    // --- Step 8: Initialize Programs ---
+    initGradientProgram(gl);
+    initBlurProgram(gl);
+    initSpectralCompositeProgram(gl);
 
-    // (Re-)allocate frameTexture, tempTexture, blurOutputTexture, and trail textures
-    gl!.bindTexture(gl!.TEXTURE_2D, frameTexture);
-    gl!.texImage2D(gl!.TEXTURE_2D, 0, gl!.RGBA, canvasWebGL.width, canvasWebGL.height, 0, gl!.RGBA, gl!.UNSIGNED_BYTE, null);
 
-    gl!.bindTexture(gl!.TEXTURE_2D, tempTexture);
-    gl!.texImage2D(gl!.TEXTURE_2D, 0, gl!.RGBA, canvasWebGL.width, canvasWebGL.height, 0, gl!.RGBA, gl!.UNSIGNED_BYTE, null);
+    // Clear blur textures initially (optional, good practice)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, blurFramebuffer);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, blurredElementsTexture, 0);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tempBlurTexture, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
 
-    gl!.bindTexture(gl!.TEXTURE_2D, blurOutputTexture);
-    gl!.texImage2D(gl!.TEXTURE_2D, 0, gl!.RGBA, canvasWebGL.width, canvasWebGL.height, 0, gl!.RGBA, gl!.UNSIGNED_BYTE, null);
 
-    // Allocate trail textures
-    gl!.bindTexture(gl!.TEXTURE_2D, circleTrailTexA);
-    gl!.texImage2D(gl!.TEXTURE_2D, 0, gl!.RGBA, canvasWebGL.width, canvasWebGL.height, 0, gl!.RGBA, gl!.UNSIGNED_BYTE, null);
-    gl!.bindTexture(gl!.TEXTURE_2D, circleTrailTexB);
-    gl!.texImage2D(gl!.TEXTURE_2D, 0, gl!.RGBA, canvasWebGL.width, canvasWebGL.height, 0, gl!.RGBA, gl!.UNSIGNED_BYTE, null);
-
-    // Clear the initial trail texture (optional, but good practice)
-    gl!.bindFramebuffer(gl!.FRAMEBUFFER, trailFramebuffer);
-    gl!.framebufferTexture2D(gl!.FRAMEBUFFER, gl!.COLOR_ATTACHMENT0, gl!.TEXTURE_2D, readTrailTex, 0);
-    gl!.clearColor(0, 0, 0, 0); // Transparent black
-    gl!.clear(gl!.COLOR_BUFFER_BIT);
-
-    // Also clear the temp trail blur texture
-    gl!.framebufferTexture2D(gl!.FRAMEBUFFER, gl!.COLOR_ATTACHMENT0, gl!.TEXTURE_2D, trailBlurTempTex, 0);
-    gl!.clear(gl!.COLOR_BUFFER_BIT);
-
-    gl!.bindFramebuffer(gl!.FRAMEBUFFER, null); // Unbind
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); // Ensure we end unbound
 }
 
-let rectWidth = 300
-let rectHeight = 300
-
-export function draw({ canvas2d, canvasWebGL }: CanvasContexts) {
-    const ctx = canvas2d.getContext('2d');
-    if (!ctx || !gl || !framebuffer || !frameTexture || !tempTexture ||
-        !positionBuffer || !texCoordBuffer || // Check buffers
-        !gradientProgram || !compositeProgram || !blurProgram || !fadeProgram || !drawTextureProgram || // Check programs
-        !circleTrailTexA || !circleTrailTexB || !trailFramebuffer || !readTrailTex || !writeTrailTex || // Check trail resources
-        !trailBlurTempTex || // Check new temp texture
-        !blurOutputTexture) {
+export function draw({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
+    // --- Step 15a: Update resource check ---
+    if (!gl || !framebuffer || !frameTexture ||
+        !elementsCanvas || !elementsCtx || !elementsTexture || // Added elements check
+        !blurFramebuffer || !blurredElementsTexture || !tempBlurTexture || // Added blur texture check
+        !positionBuffer || !texCoordBuffer ||
+        !gradientProgram || !blurProgram || !spectralCompositeProgram) { // Added blurProgram check
+        // This check might technically be redundant now due to types,
+        // but kept for explicit runtime safety.
         throw new Error('Context or critical resources not initialized');
     }
 
-    // --- 1. Draw gradient to frameTexture (offscreen) ---
-    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer); // Use main framebuffer
+    const width = canvasWebGL.width;
+    const height = canvasWebGL.height;
+    const currentTime = frameCount / FRAMES_PER_SECOND;
+
+    // --- Pass 1: Draw gradient to frameTexture (offscreen) ---
+    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, frameTexture, 0);
-    gl.viewport(0, 0, canvasWebGL.width, canvasWebGL.height);
+    gl.viewport(0, 0, width, height);
     gl.useProgram(gradientProgram);
 
-    // Set uniforms for colors
-    const colorA = hexToRgb01(GRADIENT_COLOR_A);
-    const colorB = hexToRgb01(GRADIENT_COLOR_B);
-    gl.uniform3fv(gl.getUniformLocation(gradientProgram, 'u_colorA'), colorA);
-    gl.uniform3fv(gl.getUniformLocation(gradientProgram, 'u_colorB'), colorB);
+    // Set uniforms for B&W gradient pass
+    const colorA_Gradient = hexToRgb01("#000000");
+    const colorB_Gradient = hexToRgb01("#FFFFFF");
+    gl.uniform3fv(gl.getUniformLocation(gradientProgram, 'u_colorA'), colorA_Gradient);
+    gl.uniform3fv(gl.getUniformLocation(gradientProgram, 'u_colorB'), colorB_Gradient);
+    gl.uniform1f(gl.getUniformLocation(gradientProgram, 'u_time'), currentTime);
+    gl.uniform1f(gl.getUniformLocation(gradientProgram, 'u_noiseCenter'), NOISE_CENTER);
+    gl.uniform1f(gl.getUniformLocation(gradientProgram, 'u_noiseWidth'), NOISE_WIDTH);
+    gl.uniform1f(gl.getUniformLocation(gradientProgram, 'u_noiseAmplitude'), NOISE_AMPLITUDE);
+    gl.uniform1f(gl.getUniformLocation(gradientProgram, 'u_noiseSpeed'), NOISE_SPEED);
+    gl.uniform1f(gl.getUniformLocation(gradientProgram, 'u_noiseScale'), NOISE_SCALE);
+    gl.uniform1f(gl.getUniformLocation(gradientProgram, 'u_noiseOffsetScale'), NOISE_OFFSET_SCALE);
+    gl.uniform1f(gl.getUniformLocation(gradientProgram, 'u_waveAmplitude'), WAVE_AMPLITUDE);
+    gl.uniform1f(gl.getUniformLocation(gradientProgram, 'u_waveXScale'), WAVE_XSCALE);
+    gl.uniform1f(gl.getUniformLocation(gradientProgram, 'u_waveTimeScale'), WAVE_TIMESCALE);
+    gl.uniform1f(gl.getUniformLocation(gradientProgram, 'u_gridScale'), GRID_SCALE);
+    gl.uniform1f(gl.getUniformLocation(gradientProgram, 'u_gridRotation'), GRID_ROTATION);
+    gl.uniform2fv(gl.getUniformLocation(gradientProgram, 'u_gridAxisScale'), GRID_AXIS_SCALE);
+    gl.uniform1f(gl.getUniformLocation(gradientProgram, 'u_gridWaveSpeed'), GRID_WAVE_SPEED);
 
-    // Set the u_time uniform
-    const timeLocation = gl.getUniformLocation(gradientProgram, 'u_time');
-    const currentTime = frameCount / FRAMES_PER_SECOND;
-    gl.uniform1f(timeLocation, currentTime);
-
-    // Set the noise region uniforms
-    const noiseCenterLocation = gl.getUniformLocation(gradientProgram, 'u_noiseCenter');
-    const noiseWidthLocation = gl.getUniformLocation(gradientProgram, 'u_noiseWidth');
-    gl.uniform1f(noiseCenterLocation, NOISE_CENTER);
-    gl.uniform1f(noiseWidthLocation, NOISE_WIDTH);
-
-    // Set the noise parameter uniforms
-    const noiseAmplitudeLocation = gl.getUniformLocation(gradientProgram, 'u_noiseAmplitude');
-    const noiseSpeedLocation = gl.getUniformLocation(gradientProgram, 'u_noiseSpeed');
-    const noiseScaleLocation = gl.getUniformLocation(gradientProgram, 'u_noiseScale');
-    const noiseOffsetScaleLocation = gl.getUniformLocation(gradientProgram, 'u_noiseOffsetScale');  
-    gl.uniform1f(noiseAmplitudeLocation, NOISE_AMPLITUDE);
-    gl.uniform1f(noiseSpeedLocation, NOISE_SPEED);
-    gl.uniform1f(noiseScaleLocation, NOISE_SCALE);
-    gl.uniform1f(noiseOffsetScaleLocation, NOISE_OFFSET_SCALE);
-
-    // --- Add this: set the wave amplitude uniform ---
-    const waveAmplitudeLocation = gl.getUniformLocation(gradientProgram, 'u_waveAmplitude');
-    gl.uniform1f(waveAmplitudeLocation, WAVE_AMPLITUDE);
-
-    // --- Add this: set the wave x scale uniform ---
-    const waveXScaleLocation = gl.getUniformLocation(gradientProgram, 'u_waveXScale');
-    gl.uniform1f(waveXScaleLocation, WAVE_XSCALE);
-
-    // --- Add this: set the wave time scale uniform ---
-    const waveTimeScaleLocation = gl.getUniformLocation(gradientProgram, 'u_waveTimeScale');
-    gl.uniform1f(waveTimeScaleLocation, WAVE_TIMESCALE);
-
-    // Draw the quad (gradient background)
+    // Draw the grayscale gradient quad
+    gl.clearColor(0, 0, 0, 0); // Clear FBO with transparent black
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-    // --- 2. Draw CURRENT lines/circles to offscreen 2D canvas and upload as texture ---
-    if (circlesCtx) {
-        // Clear the 2D canvas completely ONCE before drawing all elements for this frame
-        circlesCtx.clearRect(0, 0, circlesCanvas.width, circlesCanvas.height);
+    // --- Pass 2: Draw 2D elements to elementsTexture ---
+    // Clear the 2D canvas (transparent)
+    elementsCtx.clearRect(0, 0, elementsCanvas.width, elementsCanvas.height);
 
-        // draw a big circle
-        circlesCtx.beginPath();
-        circlesCtx.arc(circlesCanvas.width / 2, circlesCanvas.height / 2, 100, 0, 2 * Math.PI, false);
-        circlesCtx.fillStyle = BIG_CIRCLE_COLOR;
-        circlesCtx.fill();
-        circlesCtx.closePath();
+    // Draw the custom stretched hexagon
+    elementsCtx.fillStyle = 'black'; // Opaque black
+    elementsCtx.beginPath();
+    const centerX = elementsCanvas.width / 2;
+    const centerY = elementsCanvas.height / 2;
+    const R = 150; // Base radius, determines horizontal extent and angled side length
 
-        // Lissajous parameters (base)
-        const a = 3.5;
-        const b = 5.5;
-        const delta = Math.PI / 2;
-        const base_time_in_seconds = frameCount / FRAMES_PER_SECOND; // Base time for the leading element
-        const scale_factor = 0.1; // Original scaling factor for time in Lissajous calculation
-        const margin = 155;
-        const Ax = (circlesCanvas.width / 2) - margin;
-        const By = (circlesCanvas.height / 2) - margin;
-        let maxLineLength = 40;
-        let lineLength = 40; // Desired line length (kept for potential future use)
-        let halfLineLength = lineLength / 2; // (kept for potential future use)
-        const circleRadius = 10; // Define the circle radius
+    // Calculate vertex coordinates based on the desired shape:
+    // - Vertical sides (connecting side vertices) should have length 2*R
+    // - Angled sides (connecting top/bottom to sides) should have length R
+    const ryTop = R * 1.5;              // Top/Bottom Y offset (derived: 3R/2)
+    const ySide = R;                    // Side vertices Y offset (to make vertical side 2R)
+    const xSide = R * Math.sqrt(3) / 2; // Side vertices X offset (from regular hexagon)
 
-        // Loop to draw n elements
-        for (let i = 0; i < NUM_CIRCLES; i++) {
-            // Calculate the effective time 't' for this element
-            const circle_time_in_seconds = base_time_in_seconds - (i * CIRCLE_SPACING / FRAMES_PER_SECOND); // Correct spacing to seconds
-            const t = scale_factor * circle_time_in_seconds;
+    // Define the 6 vertices relative to center
+    const points = [
+        { x: 0,       y: ryTop },  // 1. Top
+        { x: xSide,   y: ySide },  // 2. Top-Right
+        { x: xSide,   y: -ySide }, // 3. Bottom-Right
+        { x: 0,       y: -ryTop }, // 4. Bottom
+        { x: -xSide,  y: -ySide }, // 5. Bottom-Left
+        { x: -xSide,  y: ySide }   // 6. Top-Left
+    ];
 
-            // taper the line length
-            if ((i * 2) < maxLineLength) {
-                lineLength = i * 2;
-                halfLineLength = lineLength / 2;
-            } else {
-                lineLength = maxLineLength;
-                halfLineLength = lineLength / 2;
-            }
+    // Move to the first vertex (Top)
+    elementsCtx.moveTo(centerX + points[0].x, centerY + points[0].y);
 
-            // Calculate position (center point) for this element
-            const cx = circlesCanvas.width / 2 + Ax * Math.sin(a * t + delta);
-            const cy = circlesCanvas.height / 2 + By * Math.sin(b * t);
-
-            // --- Calculations for perpendicular line (kept but not used for drawing) ---
-            const dxdt = Ax * a * Math.cos(a * t + delta) * scale_factor;
-            const dydt = By * b * Math.cos(b * t) * scale_factor;
-            let px = -dydt;
-            let py = dxdt;
-            const mag = Math.sqrt(px * px + py * py);
-            if (mag > 1e-6) {
-                px /= mag;
-                py /= mag;
-            } else {
-                px = 1;
-                py = 0;
-            }
-            const startX = cx - px * halfLineLength;
-            const startY = cy - py * halfLineLength;
-            const endX = cx + px * halfLineLength;
-            const endY = cy + py * halfLineLength;
-            // --- End of line calculations ---
-
-            // --- Draw the circle ---
-            circlesCtx.beginPath();
-            circlesCtx.arc(cx, cy, circleRadius, 0, 2 * Math.PI, false);
-            circlesCtx.fillStyle = CIRCLE_COLOR; // Use fillStyle for circles
-            circlesCtx.fill(); // Fill the circle
-            circlesCtx.closePath(); // Good practice to close path
-
-            // circlesCtx.beginPath();
-            // circlesCtx.moveTo(startX, startY);
-            // circlesCtx.lineTo(endX, endY);
-            // circlesCtx.lineWidth = 10; // Set line thickness
-            // circlesCtx.strokeStyle = CIRCLE_COLOR; // Set line color
-            // circlesCtx.stroke(); // Draw the line
-            // circlesCtx.closePath();
-        }
+    // Draw lines to subsequent vertices
+    for (let i = 1; i < points.length; i++) {
+        elementsCtx.lineTo(centerX + points[i].x, centerY + points[i].y);
     }
-    if (!window.circleTexture) {
-        window.circleTexture = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, window.circleTexture);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    }
-    gl.activeTexture(gl.TEXTURE1); // Use texture unit 1 for the current element temporarily
-    gl.bindTexture(gl.TEXTURE_2D, window.circleTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, circlesCanvas);
 
-    // --- 2.5 Update Trail Texture ---
-    gl.bindFramebuffer(gl.FRAMEBUFFER, trailFramebuffer);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, writeTrailTex, 0);
-    gl.viewport(0, 0, canvasWebGL.width, canvasWebGL.height);
+    elementsCtx.closePath(); // Close the path to complete the hexagon
+    elementsCtx.fill();
 
-    // a) Fade Pass: Draw the previous frame's trail (readTrailTex) faded into writeTrailTex
-    gl.useProgram(fadeProgram);
+    // Upload canvas to elementsTexture (use texture unit 0 temporarily)
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, readTrailTex);
-    gl.uniform1i(gl.getUniformLocation(fadeProgram, "u_image"), 0);
-    gl.uniform1f(gl.getUniformLocation(fadeProgram, "u_fadeAmount"), FADE_AMOUNT);
-    gl.uniform1f(gl.getUniformLocation(fadeProgram, "u_flipY"), 0.0); // Rendering to FBO
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.bindTexture(gl.TEXTURE_2D, elementsTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, elementsCanvas);
 
-    // b) Draw Current Circle Pass: Draw the current circle (window.circleTexture) on top
-    gl.enable(gl.BLEND); // Enable alpha blending
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); // Standard alpha blending
+    // --- Pass 3: Blur elementsTexture into blurredElementsTexture ---
+    let readTex = elementsTexture;
+    let writeTex = blurredElementsTexture;
+    let finalBlurredTexture = elementsTexture; // Default if BLUR_PASSES is 0
 
-    gl.useProgram(drawTextureProgram);
-    gl.activeTexture(gl.TEXTURE0); // Texture unit 0 is already bound to window.circleTexture from step 2
-    gl.bindTexture(gl.TEXTURE_2D, window.circleTexture);
-    gl.uniform1i(gl.getUniformLocation(drawTextureProgram, "u_image"), 0);
-    gl.uniform1f(gl.getUniformLocation(drawTextureProgram, "u_flipY"), 0.0); // Rendering to FBO
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    if (BLUR_PASSES > 0 && BLUR_RADIUS > 0) {
+        gl.useProgram(blurProgram);
+        gl.uniform2f(gl.getUniformLocation(blurProgram, "u_resolution"), width, height);
+        gl.uniform1f(gl.getUniformLocation(blurProgram, "u_blurRadius"), BLUR_RADIUS);
+        gl.uniform1f(gl.getUniformLocation(blurProgram, "u_time"), currentTime); // Pass time if blur shader uses it
+        gl.uniform1f(gl.getUniformLocation(blurProgram, "u_flipY"), 0.0); // IMPORTANT: Flip Y is 0.0 for FBO rendering
 
-    gl.disable(gl.BLEND); // Disable blending
+        gl.bindFramebuffer(gl.FRAMEBUFFER, blurFramebuffer); // Use the dedicated blur FBO
+        gl.viewport(0, 0, width, height); // Set viewport for FBO
 
-    // --- 2.75 Blur Trail Texture (NEW STEP) ---
-    let readTexTrailBlur = writeTrailTex;      // Start reading from the updated trail
-    let writeTexTrailBlur = trailBlurTempTex;  // Write to the temporary blur texture
-    let finalBlurredTrailTex = writeTrailTex; // Assume 0 passes initially
+        for (let i = 0; i < BLUR_PASSES; ++i) {
+            // Set the target texture for this pass
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, writeTex, 0);
 
-    if (TRAIL_BLUR_PASSES > 0 && TRAIL_BLUR_RADIUS > 0) {
-         gl.useProgram(blurProgram); // Use the existing blur program
-         gl.uniform2f(gl.getUniformLocation(blurProgram, "u_resolution"), canvasWebGL.width, canvasWebGL.height);
-         gl.uniform1f(gl.getUniformLocation(blurProgram, "u_blurRadius"), TRAIL_BLUR_RADIUS);
-         gl.uniform1f(gl.getUniformLocation(blurProgram, "u_time"), currentTime);
-         gl.uniform1f(gl.getUniformLocation(blurProgram, "u_flipY"), 0.0); // Always 0.0 when rendering to FBO
-
-        for (let i = 0; i < TRAIL_BLUR_PASSES; ++i) {
-            gl.bindFramebuffer(gl.FRAMEBUFFER, trailFramebuffer); // Use the trail FBO
-            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, writeTexTrailBlur, 0); // Set output texture
-
-            gl.viewport(0, 0, canvasWebGL.width, canvasWebGL.height); // Set viewport
-
-            gl.activeTexture(gl.TEXTURE0);
-            gl.bindTexture(gl.TEXTURE_2D, readTexTrailBlur); // Bind input texture
+            // Bind the texture to read from
+            gl.activeTexture(gl.TEXTURE0); // Use texture unit 0 for blur input
+            gl.bindTexture(gl.TEXTURE_2D, readTex);
             gl.uniform1i(gl.getUniformLocation(blurProgram, "u_image"), 0);
 
-            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); // Execute blur pass
+            // Execute blur pass
+            gl.clearColor(0, 0, 0, 0); // Clear FBO just in case
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
             // Swap textures for next pass
-            const tmp = readTexTrailBlur;
-            readTexTrailBlur = writeTexTrailBlur;
-            writeTexTrailBlur = tmp;
+            [readTex, writeTex] = [writeTex, readTex]; // Ping-pong
         }
-        finalBlurredTrailTex = readTexTrailBlur; // The last texture read from is the final result
+        finalBlurredTexture = readTex; // The last texture read from is the final result
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null); // Unbind the blur FBO
+    } else {
+        finalBlurredTexture = elementsTexture; // Use original if no blur
     }
-    // Ensure we unbind the framebuffer if we used it
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
 
-    // --- 3. Composite: blend gradient and FINAL (blurred) trail into tempTexture ---
-    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer); // Use main framebuffer
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tempTexture, 0);
-    gl.viewport(0, 0, canvasWebGL.width, canvasWebGL.height);
-    gl.useProgram(compositeProgram);
+    // --- Pass 4: Composite to screen using spectral shader ---
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); // Render to screen
+    gl.viewport(0, 0, width, height);
+    gl.useProgram(spectralCompositeProgram);
 
-    // Bind gradient as u_gradient (texture unit 0)
+    // Bind gradient texture to unit 0
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, frameTexture);
-    gl.uniform1i(gl.getUniformLocation(compositeProgram, "u_gradient"), 0);
+    gl.uniform1i(gl.getUniformLocation(spectralCompositeProgram, "u_gradientTex"), 0);
 
-    // Bind FINAL (potentially blurred) trail as u_circle (texture unit 1)
+    // Bind blurred elements texture to unit 1
     gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, finalBlurredTrailTex); // <-- Use the final blurred trail texture
-    gl.uniform1i(gl.getUniformLocation(compositeProgram, "u_circle"), 1);
+    gl.bindTexture(gl.TEXTURE_2D, finalBlurredTexture); // Use the result from blur pass
+    gl.uniform1i(gl.getUniformLocation(spectralCompositeProgram, "u_elementsTex"), 1);
 
-    // Set u_flipY to 0 when compositing to a texture
-    gl.uniform1i(gl.getUniformLocation(compositeProgram, "u_flipY"), 0);
+    // Set palette color uniforms
+    const colorA_Palette = hexToRgb01(GRADIENT_COLOR_A);
+    const colorB_Palette = hexToRgb01(GRADIENT_COLOR_B);
+    const colorC_Palette = hexToRgb01(PALETTE_COLOR_C);
+    const colorD_Palette = hexToRgb01(PALETTE_COLOR_D);
+    gl.uniform3fv(gl.getUniformLocation(spectralCompositeProgram, "u_colorA"), colorA_Palette);
+    gl.uniform3fv(gl.getUniformLocation(spectralCompositeProgram, "u_colorB"), colorB_Palette);
+    gl.uniform3fv(gl.getUniformLocation(spectralCompositeProgram, "u_colorC"), colorC_Palette);
+    gl.uniform3fv(gl.getUniformLocation(spectralCompositeProgram, "u_colorD"), colorD_Palette);
 
+    // Set u_flipY for drawing to the screen
+    gl.uniform1f(gl.getUniformLocation(spectralCompositeProgram, "u_flipY"), 1.0);
+
+    // Clear screen before drawing final texture
+    gl.clearColor(0, 0, 0, 1); // Clear with opaque black
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    // Draw the final composited quad
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-    // --- 4. Blur passes: ping-pong between tempTexture and blurOutputTexture ---
-    let readTexBlur = tempTexture;          // Start reading from the composited texture
-    let writeTexBlur = blurOutputTexture;
-
-    for (let i = 0; i < BLUR_PASSES; ++i) {
-        const isLast = (i === BLUR_PASSES - 1);
-        gl.bindFramebuffer(gl.FRAMEBUFFER, isLast ? null : framebuffer); // Render to screen on last pass
-        if (!isLast) {
-            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, writeTexBlur, 0);
-        }
-
-        gl.viewport(0, 0, canvasWebGL.width, canvasWebGL.height);
-        gl.useProgram(blurProgram);
-
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, readTexBlur); // Read from the correct blur texture
-        gl.uniform1i(gl.getUniformLocation(blurProgram, "u_image"), 0);
-        gl.uniform2f(gl.getUniformLocation(blurProgram, "u_resolution"), canvasWebGL.width, canvasWebGL.height);
-        gl.uniform1f(gl.getUniformLocation(blurProgram, "u_blurRadius"), BLUR_RADIUS);
-        gl.uniform1f(gl.getUniformLocation(blurProgram, "u_time"), currentTime); // Use calculated time
-
-        // Set the u_flipY uniform: 1.0 for final pass to screen, 0.0 for FBO
-        gl.uniform1f(gl.getUniformLocation(blurProgram, "u_flipY"), isLast ? 1.0 : 0.0);
-
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-        // Swap read/write textures for next blur pass
-        const tmp = readTexBlur;
-        readTexBlur = writeTexBlur;
-        writeTexBlur = tmp;
-    }
-
-    // --- 5. If no blur passes, draw composited result (tempTexture) directly to screen ---
-    if (BLUR_PASSES === 0) {
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null); // Render to screen
-        gl.viewport(0, 0, canvasWebGL.width, canvasWebGL.height);
-        gl.useProgram(drawTextureProgram); // Use the simple draw texture program
-
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, tempTexture); // Draw the composited result
-        gl.uniform1i(gl.getUniformLocation(drawTextureProgram, "u_image"), 0);
-
-        // Set u_flipY to 1 when drawing to the screen
-        gl.uniform1f(gl.getUniformLocation(drawTextureProgram, "u_flipY"), 1.0);
-
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    }
-
-    // --- 6. Swap Trail Textures for next frame ---
-    const tempTrail = readTrailTex;
-    readTrailTex = writeTrailTex;
-    writeTrailTex = tempTrail;
 
     frameCount++;
 }
 
+// Add back rendering control functions
 async function startRendering() {
     try {
         dirHandle = await window.showDirectoryPicker();
         currentFrameNumber = 0;
         isRendering = true;
         console.log('Starting render sequence...');
-    } catch (err) {
+    } catch (err: any) { // Added type annotation for err
         console.error(err.name, err.message);
     }
 }
@@ -655,17 +410,23 @@ async function saveCurrentFrame(canvas: HTMLCanvasElement) {
 }
 
 export function start(contexts: CanvasContexts) {
+    // Modify animation loop for conditional saving
     async function animate() {
         draw(contexts);
         
         if (isRendering) {
+            // Need to pass the correct canvas (canvasWebGL) to saveCurrentFrame
             await saveCurrentFrame(contexts.canvasWebGL);
+            // Only request next frame if still rendering
+            if (isRendering) {
             requestAnimationFrame(animate);
+            }
         } else {
-            requestAnimationFrame(animate);
+            requestAnimationFrame(animate); // Continue animation even when not saving
         }
     }
 
+    // Add back render button listener
     const renderButton = document.querySelector('#render-button');
     renderButton?.addEventListener('click', startRendering);
     
@@ -673,22 +434,30 @@ export function start(contexts: CanvasContexts) {
     animate();
 }
 
-// Call this after initWebGL in setup()
+// Keep initGradientProgram - no ! needed for gl, positionBuffer, texCoordBuffer
 function initGradientProgram(gl: WebGLRenderingContext) {
-    const vertexShader = gl.createShader(gl.VERTEX_SHADER)!;
+    const vertexShader = gl.createShader(gl.VERTEX_SHADER); // Removed !
+    if (!vertexShader) throw new Error("Couldn't create vertex shader"); // Added check
     gl.shaderSource(vertexShader, passthroughVertexShader);
     gl.compileShader(vertexShader);
+    // TODO: Add error checking
 
-    const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER)!;
-    gl.shaderSource(fragmentShader, simpleGradientFragmentShader);
+    const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER); // Removed !
+    if (!fragmentShader) throw new Error("Couldn't create fragment shader"); // Added check
+    gl.shaderSource(fragmentShader, gridGradientFragmentShader);
     gl.compileShader(fragmentShader);
+    // TODO: Add error checking
 
-    gradientProgram = gl.createProgram()!;
+    const localProgram = gl.createProgram(); // Removed !
+    if (!localProgram) throw new Error("Couldn't create program"); // Added check
+    gradientProgram = localProgram; // Assign to global
     gl.attachShader(gradientProgram, vertexShader);
     gl.attachShader(gradientProgram, fragmentShader);
     gl.linkProgram(gradientProgram);
+    // TODO: Add error checking
 
-    // Set up attributes for this program
+    // Set up attributes using global buffers
+    gl.useProgram(gradientProgram); // Use program before getting locations
     const positionLocation = gl.getAttribLocation(gradientProgram, "a_position");
     gl.enableVertexAttribArray(positionLocation);
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer); // Bind correct buffer
@@ -700,86 +469,89 @@ function initGradientProgram(gl: WebGLRenderingContext) {
     gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
 }
 
-function initCompositeProgram(gl: WebGLRenderingContext) {
-    const vertexShader = gl.createShader(gl.VERTEX_SHADER)!;
+// --- Step 9: Implement initBlurProgram ---
+function initBlurProgram(gl: WebGLRenderingContext) {
+    const vertexShader = gl.createShader(gl.VERTEX_SHADER);
+    if (!vertexShader) throw new Error("Couldn't create vertex shader for blur");
     gl.shaderSource(vertexShader, passthroughVertexShader);
     gl.compileShader(vertexShader);
+    // TODO: Check compile status: gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)
 
-    const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER)!;
-    gl.shaderSource(fragmentShader, compositeFragmentShader);
+    const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+    if (!fragmentShader) throw new Error("Couldn't create fragment shader for blur");
+    gl.shaderSource(fragmentShader, blurFragmentShader); // Use blur shader source
     gl.compileShader(fragmentShader);
+    // TODO: Check compile status: gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)
 
-    compositeProgram = gl.createProgram()!;
-    gl.attachShader(compositeProgram, vertexShader);
-    gl.attachShader(compositeProgram, fragmentShader);
-    gl.linkProgram(compositeProgram);
+    const localProgram = gl.createProgram();
+    if (!localProgram) throw new Error("Couldn't create blur program");
+    blurProgram = localProgram; // Assign to the global variable
+    gl.attachShader(blurProgram, vertexShader);
+    gl.attachShader(blurProgram, fragmentShader);
+    gl.linkProgram(blurProgram);
+    // TODO: Check link status: gl.getProgramParameter(blurProgram, gl.LINK_STATUS)
 
-    // Set up attributes for this program
-    const positionLocation = gl.getAttribLocation(compositeProgram, "a_position");
+    // Set up attributes using global buffers
+    gl.useProgram(blurProgram); // Use program before getting locations
+
+    const positionLocation = gl.getAttribLocation(blurProgram, "a_position");
     gl.enableVertexAttribArray(positionLocation);
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer); // Bind correct buffer
     gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
 
-    const texCoordLocation = gl.getAttribLocation(compositeProgram, "a_texCoord");
+    const texCoordLocation = gl.getAttribLocation(blurProgram, "a_texCoord");
     gl.enableVertexAttribArray(texCoordLocation);
     gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer); // Bind correct buffer
     gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
 }
 
-function initFadeProgram(gl: WebGLRenderingContext) {
-    const vertexShader = gl.createShader(gl.VERTEX_SHADER)!;
+// Remove placeholder/old initPaletteProgram - Will be replaced by initSpectralCompositeProgram
+// function initPaletteProgram(gl: WebGLRenderingContext) { ... }
+
+
+// --- Step 10: Implement initSpectralCompositeProgram ---
+function initSpectralCompositeProgram(gl: WebGLRenderingContext) {
+    const vertexShader = gl.createShader(gl.VERTEX_SHADER);
+    if (!vertexShader) throw new Error("Couldn't create vertex shader for composite");
     gl.shaderSource(vertexShader, passthroughVertexShader);
     gl.compileShader(vertexShader);
-    // TODO: Add error checking for shader compilation
+    // TODO: Check compile status
 
-    const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER)!;
-    gl.shaderSource(fragmentShader, fadeFragmentShader); // Use fade fragment shader
+    const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+    if (!fragmentShader) throw new Error("Couldn't create fragment shader for composite");
+    // Use the NEW spectral composite fragment shader source
+    gl.shaderSource(fragmentShader, spectralCompositeFragmentShader); // Changed source
     gl.compileShader(fragmentShader);
-    // TODO: Add error checking for shader compilation
+    // TODO: Check compile status
 
-    fadeProgram = gl.createProgram()!;
-    gl.attachShader(fadeProgram, vertexShader);
-    gl.attachShader(fadeProgram, fragmentShader);
-    gl.linkProgram(fadeProgram);
-    // TODO: Add error checking for program linking
+    const localProgram = gl.createProgram();
+    if (!localProgram) throw new Error("Couldn't create spectral composite program");
+    spectralCompositeProgram = localProgram; // Assign to the renamed global variable
+    gl.attachShader(spectralCompositeProgram, vertexShader);
+    gl.attachShader(spectralCompositeProgram, fragmentShader);
+    gl.linkProgram(spectralCompositeProgram);
+    // TODO: Check link status
 
-     // Set up attributes for this program
-    const positionLocation = gl.getAttribLocation(fadeProgram, "a_position");
+    // Set up attributes using global buffers
+    gl.useProgram(spectralCompositeProgram); // Use program before getting locations
+
+    const positionLocation = gl.getAttribLocation(spectralCompositeProgram, "a_position");
     gl.enableVertexAttribArray(positionLocation);
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer); // Bind correct buffer
     gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
 
-    const texCoordLocation = gl.getAttribLocation(fadeProgram, "a_texCoord");
+    const texCoordLocation = gl.getAttribLocation(spectralCompositeProgram, "a_texCoord");
     gl.enableVertexAttribArray(texCoordLocation);
     gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer); // Bind correct buffer
     gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
 }
 
-function initDrawTextureProgram(gl: WebGLRenderingContext) {
-    const vertexShader = gl.createShader(gl.VERTEX_SHADER)!;
-    gl.shaderSource(vertexShader, passthroughVertexShader);
-    gl.compileShader(vertexShader);
-    // TODO: Add error checking
-
-    const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER)!;
-    gl.shaderSource(fragmentShader, drawTextureFragmentShaderSource); // Use simple texture draw shader
-    gl.compileShader(fragmentShader);
-    // TODO: Add error checking
-
-    drawTextureProgram = gl.createProgram()!;
-    gl.attachShader(drawTextureProgram, vertexShader);
-    gl.attachShader(drawTextureProgram, fragmentShader);
-    gl.linkProgram(drawTextureProgram);
-    // TODO: Add error checking
-
-    // Set up attributes for this program
-    const positionLocation = gl.getAttribLocation(drawTextureProgram, "a_position");
-    gl.enableVertexAttribArray(positionLocation);
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer); // Bind correct buffer
-    gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
-
-    const texCoordLocation = gl.getAttribLocation(drawTextureProgram, "a_texCoord");
-    gl.enableVertexAttribArray(texCoordLocation);
-    gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer); // Bind correct buffer
-    gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
+// Keep helper function to convert hex to [r, g, b] in 0..1
+function hexToRgb01(hex: string): [number, number, number] {
+    const n = parseInt(hex.replace('#', ''), 16);
+    return [
+        ((n >> 16) & 0xff) / 255,
+        ((n >> 8) & 0xff) / 255,
+        (n & 0xff) / 255
+    ];
 }

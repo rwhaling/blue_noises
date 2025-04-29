@@ -1,18 +1,19 @@
-precision mediump float;
+precision highp float;
 
 uniform vec3 u_colorA;
 uniform vec3 u_colorB;
 varying vec2 v_texCoord;
 uniform float u_time;
-uniform float u_noiseCenter; // Center of noisy region (0.0-1.0)
-uniform float u_noiseWidth;  // Width of noisy region (0.0-1.0)
-uniform float u_noiseAmplitude;
-uniform float u_noiseSpeed;
+uniform float u_noiseSpeed;       // EDIT: Now primarily for displacement noise
 uniform float u_noiseScale;
-uniform float u_noiseOffsetScale;
-uniform float u_waveAmplitude; // Add this uniform for the wave amplitude
-uniform float u_waveXScale;    // NEW: x scale for the wave
-uniform float u_waveTimeScale; // NEW: time scale for the wave
+uniform float u_gridScale;
+uniform float u_gridRotation;   // EDIT: Added rotation uniform (radians)
+uniform vec2 u_gridAxisScale;   // EDIT: Added axis scaling uniform (xScale, yScale)
+uniform float u_noiseAmplitude; // Get noise amplitude uniform
+uniform float u_gridWaveSpeed;    // EDIT: Added uniform for sine wave speed
+
+const float PI = acos(-1.0); // Define PI if not already available
+const float INV_SQRT2 = 0.7071067811865475; // 1.0 / sqrt(2.0)
 
 vec3 mod289(vec3 x) {
   return x - floor(x * (1.0 / 289.0)) * 289.0;
@@ -105,77 +106,113 @@ float snoise(vec3 v) {
                                 dot(p2,x2), dot(p3,x3) ) );
 }
 
-// Fractal Brownian Motion (fBm) - sum of multiple octaves of noise
-float fbm(vec3 p) {
-    float sum = 0.0;
-    float amp = 0.5;
-    float freq = 1.0;
-    for (int i = 0; i < 4; i++) { // 4 octaves is a good default
-        sum += amp * snoise(p * freq);
-        freq *= 2.0;
-        amp *= 0.5;
-    }
-    return sum;
+// --- Simple 2D Hash Function ---
+// Takes a 2D vector, returns a pseudo-random 2D vector in [0, 1] range
+vec2 hash22(vec2 p) {
+    // Simple hash based on large number multiplication and fract
+    // Using constants known to work reasonably well
+    p = vec2( dot(p, vec2(127.1, 311.7)),
+              dot(p, vec2(269.5, 183.3)) );
+    return fract(sin(p) * 43758.5453);
+}
+// Note: You might want to experiment with different hash functions
+// if this one shows undesirable patterns.
+
+// --- Simple Hash Function: vec2 -> vec4 ---
+// Generates 4 pseudo-random values in [0, 1] from a 2D input
+vec4 hash24(vec2 p) {
+    // Use properties of high-frequency sine waves
+    // Different offsets/multipliers for each component
+    vec4 R = vec4(127.1, 311.7, 269.5, 183.3); // Some prime-ish numbers
+    vec4 S = vec4(43758.5453, 21758.9843, 59758.1942, 37758.4731); // Large numbers
+    return fract(sin(vec4(dot(p, R.xy), dot(p, R.yz), dot(p, R.zw), dot(p, R.wx))) * S);
 }
 
 void main() {
-    // Use uniforms for noise parameters
-    float scale = u_noiseScale;
-    float speed = u_noiseSpeed;
-    float amplitude = u_noiseAmplitude;
+    // Time components scaled separately
+    float displacementTime = u_time * u_noiseSpeed;
+    float sineWaveTime = u_time * u_gridWaveSpeed;
 
-    // --- 1. Compute the large single-octave 1D noise wave (time-wave) ---
-    float wave = snoise(vec3(
-        v_texCoord.x * u_waveXScale,
-        0.0,
-        u_time * u_waveTimeScale
-    ));
+    // Other uniforms
+    float gridScale = u_gridScale;
+    float gridRotation = u_gridRotation;
+    vec2 gridAxisScale = u_gridAxisScale;
+    float noiseAmplitude = u_noiseAmplitude;
+    float noiseScale = u_noiseScale; // Get noise scale uniform
 
-    // --- 2. Compute the warp point (seam) ---
-    float warpPoint = 0.5 + wave * u_waveAmplitude;
+    // --- Coordinate Transformation Pipeline ---
+    // 1. Start with base texture coordinates
+    vec2 pos = v_texCoord;
+    // 2. Apply overall grid scale
+    pos *= gridScale;
+    // 3. Apply user-defined rotation
+    float cosR = cos(gridRotation);
+    float sinR = sin(gridRotation);
+    mat2 rotMat = mat2(cosR, sinR, -sinR, cosR);
+    pos = rotMat * pos;
+    // 4. Apply user-defined axis scaling
+    pos *= gridAxisScale;
+    // 5. Apply fixed -45 degree rotation
+    vec2 rotatedForLookup = vec2(pos.x + pos.y, -pos.x + pos.y) * INV_SQRT2;
 
-    // --- 3. Compute fBm noise using the ORIGINAL y coordinate ---
-    float noise = fbm(vec3(
-        v_texCoord.x * scale,
-        v_texCoord.y * scale,
-        u_time * speed
-    ));
+    // --- Calculate Displacement ---
+    // Scale the lookup coordinate by noiseScale before sampling noise
+    vec2 noiseCoord = rotatedForLookup * noiseScale; // EDIT: Apply noiseScale here
+    // Sample 3D noise using scaled coordinate and displacementTime
+    float noiseValue = snoise(vec3(noiseCoord, displacementTime)); // EDIT: Use scaled noiseCoord
+    // Create offset
+    vec2 displacementOffset = vec2(noiseValue) * noiseAmplitude;
 
-    // --- 4. Symmetric threshold and remap for blobs at both ends ---
-    float threshold = 0.4;
-    float blobNoise = 0.0;
-    if (noise > threshold) {
-        blobNoise = 1.0 * u_noiseOffsetScale;
-    } else if (noise < -threshold) {
-        blobNoise = -1.0 * u_noiseOffsetScale;
-    }
+    // --- Apply Displacement and Determine Grid Cell ---
+    vec2 displacedPos = rotatedForLookup + displacementOffset;
+    vec2 i_grid = floor(displacedPos);
 
-    // --- 5. Cubic dropoff for noise region, using the original y ---
-    float halfWidth = u_noiseWidth * 0.5;
-    float dist = abs(v_texCoord.y - warpPoint);
+    // --- Define representative XY for the grid cell ---
+    vec2 representativeXY = i_grid;
 
-    float falloff = 0.0;
-    if (dist < halfWidth) {
-        float t = 1.0 - (dist / halfWidth);
-        falloff = t * t * (3.0 - 2.0 * t);
-    }
+    // --- Hash the representative coordinate ---
+    vec4 hashParams = hash24(representativeXY);
 
-    // --- 6. Offset y by blobNoise * falloff * amplitude ---
-    float noisyY = v_texCoord.y + blobNoise * amplitude * falloff;
-//    float noisyY = v_texCoord.y + blobNoise * amplitude;
+    // --- Define sine wave parameters ---
+    float freq1 = mix(0.5, 3.0, hashParams.x);
+    float phase1 = hashParams.y * 2.0 * PI;
+    float amp1 = mix(0.1, 0.5, hashParams.z);
+    float freq2 = mix(0.8, 4.0, hashParams.w);
+    float phase2 = hashParams.x * 2.0 * PI;
+    float amp2 = mix(0.1, 0.5, hashParams.y);
+    float baseOffset = mix(-0.2, 0.2, hashParams.z);
 
-    // --- 7. Warp mapping: map noisyY to [0,1] with seam at warpPoint ---
-    float warpedY;
-    if (noisyY < warpPoint) {
-        // Map [0, warpPoint] -> [0, 0.5]
-        warpedY = 0.5 * (noisyY / max(warpPoint, 1e-5));
-    } else {
-        // Map [warpPoint, 1] -> [0.5, 1]
-        warpedY = 0.5 + 0.5 * ((noisyY - warpPoint) / max(1.0 - warpPoint, 1e-5));
-    }
-    warpedY = clamp(warpedY, 0.0, 1.0);
+    // --- Combine sine waves using sineWaveTime ---
+    float sineValue = baseOffset +
+                      amp1 * sin(freq1 * sineWaveTime + phase1) +
+                      amp2 * sin(freq2 * sineWaveTime + phase2);
 
-    // --- 8. Color mix ---
-    vec3 color = mix(u_colorA, u_colorB, warpedY);
+    // --- Map the result ---
+    float mappedValue = sineValue * 0.5 + 0.5;
+    mappedValue = clamp(mappedValue, 0.0, 1.0);
+
+    /*
+    // --- OLD METHOD (commented out): Noise based on representative XY ---
+    // --- Calculate noise using snoise with representative XY and actual time ---
+    float noise = snoise(vec3(representativeXY, timeComp)); // Approx [-1, 1]
+
+    // --- Map noise from approx [-1, 1] to [0, 1] ---
+    float mappedNoise = noise * 0.5 + 0.5;
+    mappedNoise = clamp(mappedNoise, 0.0, 1.0); // Ensure it stays within range
+    float mappedValue = mappedNoise; // Use noise for color mix if uncommented
+    */
+
+    /*
+    // --- HASH OFFSET METHOD (commented out): Continuous noise offset by hash ---
+    vec2 hashOffset = hash22(representativeXY) * 100.0; // Needs hash22 function defined
+    vec2 noiseInputXY = v_texCoord * scale + hashOffset;
+    float noise = snoise(vec3(noiseInputXY, timeComp)); // Approx [-1, 1]
+    float mappedNoise = noise * 0.5 + 0.5;
+    mappedNoise = clamp(mappedNoise, 0.0, 1.0);
+    float mappedValue = mappedNoise; // Use offset noise for color mix if uncommented
+    */
+
+    // --- Color mix ---
+    vec3 color = mix(u_colorA, u_colorB, mappedValue);
     gl_FragColor = vec4(color, 1.0);
 }

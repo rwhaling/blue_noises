@@ -1,5 +1,5 @@
 import './style.css'
-import { start } from './multidraw.ts'
+import { start } from './draw.ts'
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <div>
