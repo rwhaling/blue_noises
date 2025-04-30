@@ -1,5 +1,5 @@
 import passthroughVertexShader from './shaders/passthrough.vert?raw'
-import simpleGradientFragmentShader from './shaders/simplegradient.frag?raw'
+import compositeGridGradientFragmentShader from './shaders/compositeGridGradient.frag?raw'
 import gridGradientFragmentShader from './shaders/gridgradient.frag?raw'
 import spectralCompositeFragmentShader from './shaders/spectralComposite.frag?raw'
 import blurFragmentShader from './shaders/gaussianBlur.frag?raw'
@@ -36,7 +36,7 @@ let dirHandle: FileSystemDirectoryHandle | null = null;
 const TOTAL_FRAMES = 5550; // Example value, adjust as needed
 
 // --- Step 2: Add Blur Parameters ---
-const BLUR_RADIUS = 1.0; // Example blur radius
+const BLUR_RADIUS = 4.0; // Example blur radius
 const BLUR_PASSES = 0;   // Example blur passes
 
 // Keep gradient noise parameters
@@ -57,14 +57,24 @@ let WAVE_XSCALE = 0.1;      // NEW: x scale for the wave
 let WAVE_TIMESCALE = 0.1;   // NEW: time scale for the wave
 
 // Palette Colors
-let GRADIENT_COLOR_A = '#AED4596'; // Base Color AED4596
-let GRADIENT_COLOR_B = '#33E6DA'; // Base Color B
+let GRADIENT_COLOR_A = '#261C39'; // Base Color AED4596
+let GRADIENT_COLOR_B = '#FFFFFF'; // Base Color B
 // --- Step 1: Add New Color Constants ---
-const PALETTE_COLOR_C = '#FFFFFF'; // Color for opaque black elements
-const PALETTE_COLOR_D = '#3734DA'; // Color for opaque white elements (unused for now)
+const PALETTE_COLOR_C = '#8F34DA'; // Color for opaque black elements
+const PALETTE_COLOR_D = '#AED4596'; // Color for opaque white elements (unused for now)
 // 33E6DA
 // 3734DA
+// 
 // A145ED
+// AED4596
+// C73868
+
+// 8F34DA
+// AED4596
+
+// 261C39
+// 3171B2
+
 // Add back frame padding helper
 function padFrameNumber(num: number): string {
     return num.toString().padStart(6, '0');
@@ -435,6 +445,8 @@ export function start(contexts: CanvasContexts) {
     const noiseAmpValueSpan = document.getElementById('noise-amplitude-value');
     const noiseScaleSlider = document.getElementById('noise-scale-slider') as HTMLInputElement;
     const noiseScaleValueSpan = document.getElementById('noise-scale-value');
+    const noiseSpeedSlider = document.getElementById('noise-speed-slider') as HTMLInputElement;
+    const noiseSpeedValueSpan = document.getElementById('noise-speed-value');
     const gridScaleSlider = document.getElementById('grid-scale-slider') as HTMLInputElement;
     const gridScaleValueSpan = document.getElementById('grid-scale-value');
     const gridWaveSpeedSlider = document.getElementById('grid-wave-speed-slider') as HTMLInputElement;
@@ -455,16 +467,26 @@ export function start(contexts: CanvasContexts) {
     if (noiseAmpSlider && noiseAmpValueSpan) {
         noiseAmpSlider.addEventListener('input', (e) => {
             const sliderValue = parseFloat((e.target as HTMLInputElement).value);
-            NOISE_AMPLITUDE = sliderValue / 100.0;
+            NOISE_AMPLITUDE = sliderValue / 25.0;
             noiseAmpValueSpan.textContent = NOISE_AMPLITUDE.toFixed(2);
         });
     }
     if (noiseScaleSlider && noiseScaleValueSpan) {
         noiseScaleSlider.addEventListener('input', (e) => {
             const sliderValue = parseFloat((e.target as HTMLInputElement).value);
-            const s = sliderValue / 100.0;
-            NOISE_SCALE = 1.0 + s * s * 63.0; // Quadratic scale 1.0 -> 64.0
+            const s = sliderValue / 100.0; // s ranges from 0.0 to 1.0
+            // Quadratic scale from 0.1 (when s=0) to 64.0 (when s=1)
+            NOISE_SCALE = 0.1 + s * s * 63.9; 
             noiseScaleValueSpan.textContent = NOISE_SCALE.toFixed(2);
+        });
+    }
+    if (noiseSpeedSlider && noiseSpeedValueSpan) {
+        noiseSpeedSlider.addEventListener('input', (e) => {
+            const sliderValue = parseFloat((e.target as HTMLInputElement).value);
+            // Updated calculation: divide by 10 for 0.1 increments
+            NOISE_SPEED = sliderValue / 10.0;
+            // Updated display format to one decimal place
+            noiseSpeedValueSpan.textContent = NOISE_SPEED.toFixed(1);
         });
     }
     if (gridScaleSlider && gridScaleValueSpan) {
@@ -498,7 +520,7 @@ function initGradientProgram(gl: WebGLRenderingContext) {
 
     const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER); // Removed !
     if (!fragmentShader) throw new Error("Couldn't create fragment shader"); // Added check
-    gl.shaderSource(fragmentShader, gridGradientFragmentShader);
+    gl.shaderSource(fragmentShader, compositeGridGradientFragmentShader);
     gl.compileShader(fragmentShader);
     // TODO: Add error checking
 

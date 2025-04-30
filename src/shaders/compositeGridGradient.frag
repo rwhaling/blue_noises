@@ -143,6 +143,7 @@ void main() {
     // --- Coordinate Transformation Pipeline ---
     // 1. Start with base texture coordinates
     vec2 pos = v_texCoord;
+    pos -= 0.5;
     // 2. Apply overall grid scale
     pos *= gridScale;
     // 3. Apply user-defined rotation

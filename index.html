@@ -7,30 +7,49 @@
     <title>Vite + TS</title>
   </head>
   <body>
-    <div id="app"></div>
-    <div id="slider-container">
-      <button id="toggle-controls-button">Hide Controls</button>
-      <div id="slider-groups-wrapper">
-        <div class="slider-group">
-          <label for="noise-amplitude-slider">Noise Amplitude:</label>
-          <input type="range" id="noise-amplitude-slider" min="0" max="200" step="1" value="50">
-          <span id="noise-amplitude-value">0.50</span>
+    <div id="app">
+      <!-- New wrapper for canvas and sliders -->
+      <div id="main-content">
+        <div id="canvas-container">
+          <canvas id="canvas-2d" width="600" height="600"></canvas>
+          <canvas id="canvas-webgl" width="600" height="600"></canvas>
+          <!-- Slider container MOVED OUTSIDE canvas-container -->
         </div>
-        <div class="slider-group">
-          <label for="noise-scale-slider">Noise Scale (Quadratic):</label>
-          <input type="range" id="noise-scale-slider" min="0" max="100" step="1" value="0">
-          <span id="noise-scale-value">1.00</span>
+        <!-- Slider container is now a sibling of canvas-container -->
+        <div id="slider-container">
+          <div id="slider-groups-wrapper">
+            <div class="slider-group">
+              <label for="noise-amplitude-slider">Noise Amplitude:</label>
+              <input type="range" id="noise-amplitude-slider" min="0" max="200" step="1" value="50">
+              <span id="noise-amplitude-value">0.50</span>
+            </div>
+            <div class="slider-group">
+              <label for="noise-scale-slider">Noise Scale (Quadratic):</label>
+              <input type="range" id="noise-scale-slider" min="0" max="100" step="1" value="0">
+              <span id="noise-scale-value">1.00</span>
+            </div>
+            <div class="slider-group">
+              <label for="noise-speed-slider">Noise Speed:</label>
+              <input type="range" id="noise-speed-slider" min="0" max="250" step="1" value="8">
+              <span id="noise-speed-value">0.8</span>
+            </div>
+            <div class="slider-group">
+              <label for="grid-scale-slider">Grid Scale (Quadratic):</label>
+              <input type="range" id="grid-scale-slider" min="0" max="100" step="1" value="22">
+              <span id="grid-scale-value">4.00</span>
+            </div>
+            <div class="slider-group">
+              <label for="grid-wave-speed-slider">Grid Wave Speed:</label>
+              <input type="range" id="grid-wave-speed-slider" min="0" max="400" step="1" value="10">
+              <span id="grid-wave-speed-value">0.10</span>
+            </div>
+          </div> <!-- End slider-groups-wrapper -->
         </div>
-        <div class="slider-group">
-          <label for="grid-scale-slider">Grid Scale (Quadratic):</label>
-          <input type="range" id="grid-scale-slider" min="0" max="100" step="1" value="22">
-          <span id="grid-scale-value">4.00</span>
-        </div>
-        <div class="slider-group">
-          <label for="grid-wave-speed-slider">Grid Wave Speed:</label>
-          <input type="range" id="grid-wave-speed-slider" min="0" max="400" step="1" value="10">
-          <span id="grid-wave-speed-value">0.10</span>
-        </div>
+      </div>
+      <!-- Button container with BOTH buttons -->
+      <div id="button-container">
+        <button id="toggle-controls-button">Hide Controls</button>
+        <button id="render-button">Render</button>
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>

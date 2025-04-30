@@ -1,19 +1,16 @@
 import './style.css'
 import { start } from './draw.ts'
 
-document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-  <div>
-    <div id="canvas-container">
-      <canvas id="canvas-2d" width="600" height="600"></canvas>
-      <canvas id="canvas-webgl" width="600" height="600"></canvas>
-    </div>
-    <div id="button-container">
-      <button id="render-button">Render</button>
-    </div>
-  </div>
-`
+// Select the already existing canvas elements from index.html
+const canvas2d = document.querySelector<HTMLCanvasElement>('#canvas-2d');
+const canvasWebGL = document.querySelector<HTMLCanvasElement>('#canvas-webgl');
 
-start({
-  canvas2d: document.querySelector<HTMLCanvasElement>('#canvas-2d')!,
-  canvasWebGL: document.querySelector<HTMLCanvasElement>('#canvas-webgl')!
-})
+// Ensure canvases exist before starting
+if (canvas2d && canvasWebGL) {
+  start({
+    canvas2d: canvas2d,
+    canvasWebGL: canvasWebGL
+  });
+} else {
+  console.error("Canvas elements not found! Check index.html.");
+}

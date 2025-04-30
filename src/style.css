@@ -2,7 +2,8 @@ html, body {
   height: 100%;
   margin: 0;
   padding: 0;
-  overflow: auto; /* Keep browser scrolling enabled */
+  overflow-x: hidden; /* <<< RESTORE THIS */
+  overflow-y: auto;
   background-color: #1B1B1B; /* Off-black background color */
   color: #f5f5f5; /* Lighter text color for better contrast with dark background */
   display: flex; /* Use flexbox for body */
@@ -11,33 +12,35 @@ html, body {
 }
 
 #app {
-  width: fit-content; /* Allow app to size based on content */
+  display: flex;
+  flex-direction: column; /* Stack main-content and button-container */
+  align-items: center; /* Center items horizontally */
+  margin: 40px 0;
+  width: 100%; /* Take full width to allow child centering */
+  padding: 0 20px; /* Add some horizontal padding to app */
+  box-sizing: border-box;
 }
 
-/* New style for the main layout container */
-#main-layout {
+/* New style for the flex container */
+#main-content {
   display: flex;
-  justify-content: center; /* Center items if they don't fill space */
-  align-items: flex-start; /* Align items to the top */
-  gap: 30px; /* Space between canvas and sliders */
-  margin: 40px auto 0; /* Top margin, centered */
+  justify-content: center; /* Center canvas/sidebar group */
+  align-items: flex-start; /* Align tops */
+  gap: 30px;             /* Space between canvas and sidebar */
+  width: 100%;
+  max-width: 900px; /* Max width for canvas (600) + sidebar (200) + gap (30) + buffer */
 }
 
 #canvas-container {
-  /* display: flex; */ /* No longer needed */
-  /* justify-content: center; */ /* No longer needed */
-  /* align-items: flex-start; */ /* No longer needed */
-  width: 600px; /* Explicit size for canvas area */
+  width: 600px;
   height: 600px;
-  position: relative; /* Keep for absolute canvas positioning */
-  /* margin: 40px auto 0; */ /* Removed margin, handled by main-layout */
-  /* margin-bottom: 40px; */ /* Removed margin */
+  position: relative; /* Still needed for canvas layering */
+  /* margin: 0 auto; */ /* Remove margin, flexbox handles centering */
+  flex-shrink: 0; /* Prevent canvas from shrinking */
 }
 
 #canvas-2d, #canvas-webgl {
   position: absolute;
-  /* left: 50%; */ /* Removed */
-  /* transform: translateX(-50%); */ /* Removed */
   left: 0; /* Position relative to #canvas-container */
   top: 0;  /* Position relative to #canvas-container */
 }
@@ -51,15 +54,13 @@ html, body {
 }
 
 #button-container {
-  /* position: absolute; */ /* Removed */
-  /* top: 680px; */ /* Removed */
-  /* left: 0; */ /* Removed */
-  width: 100%; /* Take full width for centering */
+  width: 100%;
   display: flex;
   justify-content: center;
-  /* margin-bottom: 20px; */ /* Removed specific margin */
-  margin-top: 30px; /* Space below the main layout */
-  margin-bottom: 40px; /* Space at the very bottom */
+  gap: 20px;
+  align-items: center;
+  margin-top: 30px; /* Space below main-content */
+  margin-bottom: 40px;
 }
 
 #render-button {
@@ -82,37 +83,37 @@ html, body {
 }
 
 #slider-container {
-  /* position: absolute; */ /* Removed */
-  /* top: 740px; */ /* Removed */
-  /* left: 50%; */ /* Removed */
-  /* transform: translateX(-50%); */ /* Removed */
-  /* width: 80%; */ /* Removed */
-  /* max-width: 800px; */ /* Removed */
-  width: 200px; /* Set a fixed width for the slider column */
-  display: flex;
-  flex-direction: column; /* Stack button and wrapper vertically */
-  justify-content: flex-start;
-  align-items: stretch; /* Stretch items */
-  gap: 15px; /* Adjusted gap for button spacing */
+  /* position: absolute; */  /* <<< REMOVE absolute */
+  /* top: 0; */             /* <<< REMOVE top */
+  /* left: 630px; */         /* <<< REMOVE left */
+  /* z-index: 3; */         /* <<< REMOVE z-index */
+  width: 200px;            /* Keep fixed width */
+  flex-shrink: 0;          /* Prevent sidebar from shrinking */
+  height: fit-content;
   padding: 15px;
   background-color: rgba(40, 40, 40, 0.8);
   border-radius: 5px;
-  /* margin-bottom: 40px; */ /* Removed margin */
-  height: fit-content;
-  transition: width 0.3s ease; /* Add transition for width change */
+  overflow: hidden;        /* Keep for collapse effect */
+  /* transition: left 0.3s ease, padding 0.3s ease-out; */ /* Change transition */
+  transition: width 0.3s ease, min-width 0.3s ease, padding 0.3s ease, opacity 0.3s ease; /* New transitions */
+  min-width: 200px;        /* Ensure minimum width when shown */
+  opacity: 1;              /* Ensure visible by default */
+  border: none;            /* Ensure no border adds size */
 }
 
-/* Style for the toggle button */
+/* Style for the toggle button (now potentially outside slider-container) */
 #toggle-controls-button {
   background-color: #4a4a4a;
   color: white;
   border: none;
-  padding: 8px 12px;
-  font-size: 14px;
+  padding: 8px 12px; /* Adjusted padding slightly */
+  font-size: 14px;   /* Adjusted font size slightly */
   border-radius: 4px;
   cursor: pointer;
   transition: background-color 0.2s ease;
-  margin-bottom: 5px; /* Space below button when sliders shown */
+  height: 40px; /* Example: Explicit height */
+  line-height: 1; /* Adjust line-height for vertical text centering */
+  box-sizing: border-box; /* Include padding in height */
 }
 
 #toggle-controls-button:hover {
@@ -123,30 +124,27 @@ html, body {
 #slider-groups-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 20px; /* Keep the gap between individual sliders */
+  gap: 20px;
   align-items: stretch;
-  overflow: hidden; /* Hide content when collapsing */
-  transition: max-height 0.3s ease-out, opacity 0.3s ease-out; /* Smooth collapse */
-  max-height: 1000px; /* Set a large max-height for shown state */
+  overflow: hidden;
+  transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+  max-height: 1000px;
   opacity: 1;
 }
 
-/* Styles when sliders are hidden */
-#slider-container.collapsed #slider-groups-wrapper {
-  max-height: 0;
-  opacity: 0;
-  gap: 0; /* Remove gap when hidden */
-  padding: 0; /* Remove padding when hidden */
-  margin: 0; /* Remove margin when hidden */
-}
-
+/* Adjust collapsed state for static positioning */
 #slider-container.collapsed {
-   width: auto; /* Allow container to shrink to button width */
-   gap: 0; /* Remove gap in container when collapsed */
+   width: 0;            /* Collapse width */
+   min-width: 0;        /* Collapse min-width */
+   padding: 0;          /* Collapse padding */
+   opacity: 0;          /* Fade out */
+   border: none;
 }
 
-#slider-container.collapsed #toggle-controls-button {
-   margin-bottom: 0; /* No margin below button when collapsed */
+#slider-container.collapsed #slider-groups-wrapper {
+   max-height: 0;
+   opacity: 0; /* Already fading with parent */
+   gap: 0;
 }
 
 .slider-group {
