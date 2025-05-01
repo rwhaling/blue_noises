@@ -128,7 +128,7 @@ html, body {
   align-items: stretch;
   overflow: hidden;
   transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
-  max-height: 1000px;
+  /* max-height: 1000px; */ /* <<< REMOVE or increase this */
   opacity: 1;
 }
 
@@ -175,3 +175,34 @@ html, body {
   border-radius: 3px;
   align-self: center; /* Center the value display */
 }
+
+/* --- ADDED: Styles for Color Input Groups --- */
+.color-input-group {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch; /* Stretch items within the group */
+  color: #f0f0f0;
+  font-size: 0.9em;
+}
+
+.color-input-group label {
+  margin-bottom: 8px; /* Space below label */
+  text-align: left;
+}
+
+.color-input-group input[type="text"] {
+  width: 100%; /* Make input fill the width */
+  padding: 5px 8px; /* Add some padding */
+  border: 1px solid #555; /* Basic border */
+  background-color: #333; /* Dark background */
+  color: #f0f0f0; /* Light text */
+  border-radius: 3px;
+  font-family: monospace; /* Monospace font often good for hex codes */
+  box-sizing: border-box; /* Include padding/border in width */
+}
+
+/* Optional: Style for invalid input */
+.color-input-group input[type="text"][style*="border-color: red"] {
+  border-color: red !important; /* Ensure override */
+}
+/* --- END ADDED Styles --- */

@@ -19,22 +19,42 @@
         <div id="slider-container">
           <div id="slider-groups-wrapper">
             <div class="slider-group">
-              <label for="noise-amplitude-slider">Noise Amplitude:</label>
+              <label for="noise-amplitude-slider">Gradient Amplitude:</label>
               <input type="range" id="noise-amplitude-slider" min="0" max="200" step="1" value="50">
               <span id="noise-amplitude-value">0.50</span>
             </div>
             <div class="slider-group">
-              <label for="noise-scale-slider">Noise Scale (Quadratic):</label>
+              <label for="noise-scale-slider">Gradient Scale (Quad):</label>
               <input type="range" id="noise-scale-slider" min="0" max="100" step="1" value="0">
               <span id="noise-scale-value">1.00</span>
             </div>
             <div class="slider-group">
-              <label for="noise-speed-slider">Noise Speed:</label>
+              <label for="shape-amplitude-slider">Shape Amplitude:</label>
+              <input type="range" id="shape-amplitude-slider" min="0" max="200" step="1" value="50">
+              <span id="shape-amplitude-value">0.50</span>
+            </div>
+            <div class="slider-group">
+              <label for="shape-scale-slider">Shape Scale (Quad):</label>
+              <input type="range" id="shape-scale-slider" min="0" max="100" step="1" value="0">
+              <span id="shape-scale-value">1.00</span>
+            </div>
+            <div class="slider-group">
+              <label for="hf-shape-amount-slider">HF Shape Amount:</label>
+              <input type="range" id="hf-shape-amount-slider" min="0" max="100" step="1" value="5">
+              <span id="hf-shape-amount-value">0.20</span>
+            </div>
+            <div class="slider-group">
+              <label for="hf-shape-scale-slider">HF Shape Scale (Quad):</label>
+              <input type="range" id="hf-shape-scale-slider" min="0" max="100" step="1" value="70">
+              <span id="hf-shape-scale-value">32.00</span>
+            </div>
+            <div class="slider-group">
+              <label for="noise-speed-slider">Noise Speed (Shared):</label>
               <input type="range" id="noise-speed-slider" min="0" max="250" step="1" value="8">
               <span id="noise-speed-value">0.8</span>
             </div>
             <div class="slider-group">
-              <label for="grid-scale-slider">Grid Scale (Quadratic):</label>
+              <label for="grid-scale-slider">Grid Scale (Shared Quad):</label>
               <input type="range" id="grid-scale-slider" min="0" max="100" step="1" value="22">
               <span id="grid-scale-value">4.00</span>
             </div>
@@ -42,6 +62,22 @@
               <label for="grid-wave-speed-slider">Grid Wave Speed:</label>
               <input type="range" id="grid-wave-speed-slider" min="0" max="400" step="1" value="10">
               <span id="grid-wave-speed-value">0.10</span>
+            </div>
+            <div class="color-input-group">
+              <label for="color-a-input">Color A (Gradient):</label>
+              <input type="text" id="color-a-input" value="#33E6DA">
+            </div>
+            <div class="color-input-group">
+              <label for="color-b-input">Color B (Gradient):</label>
+              <input type="text" id="color-b-input" value="#3734DA">
+            </div>
+            <div class="color-input-group">
+              <label for="color-c-input">Color C (Shape Fill):</label>
+              <input type="text" id="color-c-input" value="#AED4596">
+            </div>
+            <div class="color-input-group">
+              <label for="color-d-input">Color D (Unused):</label>
+              <input type="text" id="color-d-input" value="#261C39">
             </div>
           </div> <!-- End slider-groups-wrapper -->
         </div>

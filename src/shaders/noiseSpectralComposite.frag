@@ -319,6 +319,9 @@ uniform float u_gridRotation;   // EDIT: Added rotation uniform (radians)
 uniform vec2 u_gridAxisScale;   // EDIT: Added axis scaling uniform (xScale, yScale)
 uniform float u_shapeNoiseScale;     // RENAMED from u_noiseScale
 uniform float u_shapeNoiseAmplitude; // RENAMED from u_noiseAmplitude
+// --- ADDED: High Frequency Shape Noise Uniforms ---
+uniform float u_hfShapeNoiseScale;
+uniform float u_hfShapeNoiseAmount;
 
 const float PI = acos(-1.0); // Define PI if not already available
 const float INV_SQRT2 = 0.7071067811865475; // 1.0 / sqrt(2.0)
@@ -448,37 +451,37 @@ void main() {
   // --- Calculate Displacement for Elements Texture ---
   float displacementTime = u_time * u_noiseSpeed;
 
-  // 1. Start with base texture coordinates, centered
+  // Coordinate lookup uses shared grid params
   vec2 pos = uv - 0.5;
-  // 2. Apply overall grid scale
   pos *= u_gridScale;
-  // 3. Apply user-defined rotation
   float cosR = cos(u_gridRotation);
   float sinR = sin(u_gridRotation);
   mat2 rotMat = mat2(cosR, sinR, -sinR, cosR);
   pos = rotMat * pos;
-  // 4. Apply user-defined axis scaling
   pos *= u_gridAxisScale;
-  // 5. Apply fixed -45 degree rotation
   vec2 rotatedForLookup = vec2(pos.x + pos.y, -pos.x + pos.y) * INV_SQRT2;
 
-  // Scale the lookup coordinate by shape noise scale
-  vec2 noiseCoord = rotatedForLookup * u_shapeNoiseScale;
-  // Sample 3D noise using scaled coordinate and displacementTime
-  float noiseValue = snoise(vec3(noiseCoord, displacementTime)); // Value approx [-1, 1]
+  // --- Calculate Base Shape Displacement ---
+  vec2 baseNoiseCoord = rotatedForLookup * u_shapeNoiseScale;
+  float baseNoiseValue = snoise(vec3(baseNoiseCoord, displacementTime));
+  vec2 baseDisplacementOffset = vec2(baseNoiseValue) * u_shapeNoiseAmplitude * 0.05; // Base offset
 
-  // Create offset, scaling amplitude significantly for UV manipulation
-  // A smaller multiplier might be needed depending on desired effect
-  vec2 displacementOffset = vec2(noiseValue) * u_shapeNoiseAmplitude * 0.05; // Adjust multiplier (0.05) as needed
+  // --- Calculate High Frequency Shape Displacement ---
+  vec2 hfNoiseCoord = rotatedForLookup * u_hfShapeNoiseScale; // Use HF scale
+  float hfNoiseValue = snoise(vec3(hfNoiseCoord, displacementTime)); // Sample HF noise
+  // Use HF amount, and INVERSELY CORRELATE X and Y
+  // Flip the sign for the X component
+  vec2 hfDisplacementOffset = vec2(-hfNoiseValue, hfNoiseValue) * u_hfShapeNoiseAmount * 0.05; // Edit: Negate X
 
-  // Apply displacement to the original UV coordinates
-  vec2 uv_displaced_elements = uv + displacementOffset;
+  // --- Combine Displacements ---
+  vec2 totalDisplacementOffset = baseDisplacementOffset + hfDisplacementOffset;
+
+  // Apply total displacement to the original UV coordinates
+  vec2 uv_displaced_elements = uv + totalDisplacementOffset;
 
   // --- Sample Textures ---
-  // Sample gradient normally (using non-displaced, non-flipped UV)
   vec4 gradientColor = texture2D(u_gradientTex, uv);
-  // Sample elements using the DISPLACED UV coordinates
-  vec4 elementsColor = texture2D(u_elementsTex, uv_displaced_elements);
+  vec4 elementsColor = texture2D(u_elementsTex, uv_displaced_elements); // Use combined displacement
 
   // Extract intensity/alpha
   float gradientIntensity = gradientColor.r; // Assuming gradient is R=G=B
