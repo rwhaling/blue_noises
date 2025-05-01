@@ -1,29 +1,36 @@
-import passthroughVertexShader from './shaders/passthrough.vert?raw'
-import compositeGridGradientFragmentShader from './shaders/compositeGridGradient.frag?raw'
-import gridGradientFragmentShader from './shaders/gridgradient.frag?raw'
-import spectralCompositeFragmentShader from './shaders/spectralComposite.frag?raw'
-import blurFragmentShader from './shaders/gaussianBlur.frag?raw'
-import noiseSpectralCompositeFragmentShader from './shaders/noiseSpectralComposite.frag?raw'
-let frameCount = 0
+// REMOVE Shader imports
+// import passthroughVertexShader from './shaders/passthrough.vert?raw'
+// import compositeGridGradientFragmentShader from './shaders/compositeGridGradient.frag?raw'
+// import gridGradientFragmentShader from './shaders/gridgradient.frag?raw'
+// import spectralCompositeFragmentShader from './shaders/spectralComposite.frag?raw'
+// import blurFragmentShader from './shaders/gaussianBlur.frag?raw'
+// import noiseSpectralCompositeFragmentShader from './shaders/noiseSpectralComposite.frag?raw'
 
-// Keep essential WebGL globals - remove | null
-let gl: WebGLRenderingContext; // Changed
-let frameTexture: WebGLTexture; // Changed
-let framebuffer: WebGLFramebuffer; // Changed
-let positionBuffer: WebGLBuffer; // Changed
-let texCoordBuffer: WebGLBuffer; // Changed
+// ADD Renderer import
+import { Renderer, GradientUniforms, BlurUniforms, CompositeUniforms } from './render'; // Adjust path if needed
 
-// --- Step 3: Re-introduce Canvas Globals ---
+let frameCount = 0;
+
+// REMOVE WebGL Globals
+// let gl: WebGLRenderingContext;
+// let frameTexture: WebGLTexture;
+// let framebuffer: WebGLFramebuffer;
+// let positionBuffer: WebGLBuffer;
+// let texCoordBuffer: WebGLBuffer;
+// let elementsTexture: WebGLTexture;
+// let blurredElementsTexture: WebGLTexture;
+// let tempBlurTexture: WebGLTexture;
+// let blurFramebuffer: WebGLFramebuffer;
+// let gradientProgram: WebGLProgram;
+// let blurProgram: WebGLProgram;
+// let spectralCompositeProgram: WebGLProgram;
+
+// ADD Renderer instance variable
+let renderer: Renderer | null = null; // To hold the Renderer instance
+
+// Keep 2D Canvas Globals
 let elementsCanvas: HTMLCanvasElement;
 let elementsCtx: CanvasRenderingContext2D;
-
-// --- Step 4: Add Element Texture Globals ---
-let elementsTexture: WebGLTexture; // Texture for 2D canvas drawing
-let blurredElementsTexture: WebGLTexture; // Texture for blurred elements
-let tempBlurTexture: WebGLTexture; // Temp texture for blur ping-pong
-
-// --- Step 5: Add Blur Framebuffer Global ---
-let blurFramebuffer: WebGLFramebuffer; // FBO for blur passes
 
 // Keep time tracking
 let startTime = Date.now();
@@ -160,96 +167,34 @@ let snapshotValues = {
 // --- End Snapshot State ---
 
 
-// Add back frame padding helper
+// Keep padFrameNumber
 function padFrameNumber(num: number): string {
     return num.toString().padStart(6, '0');
 }
 
-// Keep passthrough vertex shader source
-const vertexShaderSource = passthroughVertexShader;
+// REMOVE vertexShaderSource constant
+// const vertexShaderSource = passthroughVertexShader;
 
-// Keep gradient program, add blur program, rename palette to spectralComposite
-let gradientProgram: WebGLProgram; // Changed
-let blurProgram: WebGLProgram;
-let spectralCompositeProgram: WebGLProgram; // Changed name
+// REMOVE old program variables (already removed above)
+// let gradientProgram: WebGLProgram;
+// let blurProgram: WebGLProgram;
+// let spectralCompositeProgram: WebGLProgram;
 
-function initWebGL(canvas: HTMLCanvasElement) {
-    const localGl = canvas.getContext('webgl', {
-        alpha: true,
-        preserveDrawingBuffer: true
-    });
-    if (!localGl) {
-        throw new Error('WebGL not supported');
-    }
-    gl = localGl;
+// REMOVE initWebGL function
+// function initWebGL(canvas: HTMLCanvasElement) { ... }
 
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+// --- ADDED: Fixed Shape Center ---
+let SHAPE_CENTER_X: number | null = null;
 
-    // --- Create Buffers ---
-    const positions = new Float32Array([ -1, -1, 1, -1, -1, 1, 1, 1 ]);
-    positionBuffer = gl.createBuffer();
-    if (!positionBuffer) throw new Error("Failed to create position buffer");
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
-
-    const texCoords = new Float32Array([ 0, 0, 1, 0, 0, 1, 1, 1 ]);
-    texCoordBuffer = gl.createBuffer();
-    if (!texCoordBuffer) throw new Error("Failed to create texCoord buffer");
-    gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, texCoords, gl.STATIC_DRAW);
-
-    // --- Create Textures (Step 7) ---
-    frameTexture = gl.createTexture();
-    if (!frameTexture) throw new Error("Failed to create frameTexture");
-    gl.bindTexture(gl.TEXTURE_2D, frameTexture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-
-    elementsTexture = gl.createTexture(); // New
-    if (!elementsTexture) throw new Error("Failed to create elementsTexture");
-    gl.bindTexture(gl.TEXTURE_2D, elementsTexture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-
-    blurredElementsTexture = gl.createTexture(); // New
-    if (!blurredElementsTexture) throw new Error("Failed to create blurredElementsTexture");
-    gl.bindTexture(gl.TEXTURE_2D, blurredElementsTexture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-
-    tempBlurTexture = gl.createTexture(); // New
-    if (!tempBlurTexture) throw new Error("Failed to create tempBlurTexture");
-    gl.bindTexture(gl.TEXTURE_2D, tempBlurTexture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-
-    // --- Create Framebuffers (Step 7) ---
-    framebuffer = gl.createFramebuffer(); // For gradient pass
-    if (!framebuffer) throw new Error("Failed to create framebuffer");
-
-    blurFramebuffer = gl.createFramebuffer(); // New: For blur passes
-    if (!blurFramebuffer) throw new Error("Failed to create blurFramebuffer");
-
-
-    // --- Initial Allocation ---
-    // Will be done in setup based on actual canvas size
-    gl.bindTexture(gl.TEXTURE_2D, null); // Unbind texture
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null); // Ensure we start unbound
-}
+// --- ADDED: Hexagon Drawing Parameters ---
+let HEXAGON_CENTER_X: number | null = null; // Renamed conceptually to WINDOW_CENTER_X
+let HEXAGON_WIDTH = 150 * Math.sqrt(3);    // Renamed conceptually to WINDOW_WIDTH
 
 export function setup({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
-    initWebGL(canvasWebGL);
+    // REMOVE old initWebGL call
+    // initWebGL(canvasWebGL);
 
-    // --- Step 8: Create elements canvas and context ---
+    // --- Step 8: Create elements canvas and context (KEEP) ---
     elementsCanvas = document.createElement('canvas');
     elementsCanvas.width = canvasWebGL.width;
     elementsCanvas.height = canvasWebGL.height;
@@ -259,65 +204,54 @@ export function setup({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
     }
     elementsCtx = localCtx;
 
-    // --- Step 8: Allocate Textures ---
-    gl.bindTexture(gl.TEXTURE_2D, frameTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, canvasWebGL.width, canvasWebGL.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    // REMOVE Texture Allocation (now handled by Renderer.resize/init)
+    // gl.bindTexture(gl.TEXTURE_2D, frameTexture);
+    // gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, canvasWebGL.width, canvasWebGL.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    // ... and other texImage2D calls ...
+    // gl.bindTexture(gl.TEXTURE_2D, null); // Unbind
 
-    gl.bindTexture(gl.TEXTURE_2D, elementsTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, canvasWebGL.width, canvasWebGL.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    // REMOVE Program Initialization calls (now handled by Renderer.init)
+    // initGradientProgram(gl);
+    // initBlurProgram(gl);
+    // initSpectralCompositeProgram(gl);
 
-    gl.bindTexture(gl.TEXTURE_2D, blurredElementsTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, canvasWebGL.width, canvasWebGL.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    // REMOVE Initial Blur Texture Clear (now handled by Renderer.resize/init)
+    // gl.bindFramebuffer(gl.FRAMEBUFFER, blurFramebuffer);
+    // ... clear calls ...
+    // gl.bindFramebuffer(gl.FRAMEBUFFER, null); // Ensure we end unbound
 
-    gl.bindTexture(gl.TEXTURE_2D, tempBlurTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, canvasWebGL.width, canvasWebGL.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    // ADD Renderer instantiation and initialization
+    renderer = new Renderer(canvasWebGL);
+    renderer.init();
 
-    gl.bindTexture(gl.TEXTURE_2D, null); // Unbind
-
-    // --- Step 8: Initialize Programs ---
-    initGradientProgram(gl);
-    initBlurProgram(gl);
-    initSpectralCompositeProgram(gl);
-
-
-    // Clear blur textures initially (optional, good practice)
-    gl.bindFramebuffer(gl.FRAMEBUFFER, blurFramebuffer);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, blurredElementsTexture, 0);
-    gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tempBlurTexture, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-
-
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null); // Ensure we end unbound
+    // Initialize SHAPE_CENTER_X (fixed)
+    SHAPE_CENTER_X = canvasWebGL.width / 2;
+    // Initialize HEXAGON_CENTER_X (controlled by slider, defaults to center)
+    HEXAGON_CENTER_X = canvasWebGL.width / 2;
 }
 
 export function draw({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
     // --- Step 15a: Update resource check ---
-    if (!gl || !framebuffer || !frameTexture ||
-        !elementsCanvas || !elementsCtx || !elementsTexture || // Added elements check
-        !blurFramebuffer || !blurredElementsTexture || !tempBlurTexture || // Added blur texture check
-        !positionBuffer || !texCoordBuffer ||
-        !gradientProgram || !blurProgram || !spectralCompositeProgram) { // Added blurProgram check
-        // This check might technically be redundant now due to types,
-        // but kept for explicit runtime safety.
-        throw new Error('Context or critical resources not initialized');
+    // ADD check for renderer instance
+    if (!renderer || !elementsCanvas || !elementsCtx) {
+         throw new Error('Renderer or elements canvas not initialized');
     }
 
     const width = canvasWebGL.width;
     const height = canvasWebGL.height;
-    // const currentTime = frameCount / FRAMES_PER_SECOND; // REMOVED old calculation
 
-    // --- UPDATE: Calculate time increment with pulse ---
+    // --- ADD BACK: Time Calculation ---
     const timeIncrementBase = 1.0 / FRAMES_PER_SECOND;
     // Calculate nominal time based on frame count for stable pulse
-    const nominalTime = frameCount / FRAMES_PER_SECOND; // EDIT: Use frameCount for pulse input
-    const pulseFactor = 1.0 + TIME_PULSE_AMOUNT * Math.cos(nominalTime * TIME_PULSE_FREQUENCY * 2.0 * Math.PI); // EDIT: Use nominalTime
+    const nominalTime = frameCount / FRAMES_PER_SECOND;
+    const pulseFactor = 1.0 + TIME_PULSE_AMOUNT * Math.cos(nominalTime * TIME_PULSE_FREQUENCY * 2.0 * Math.PI);
     const timeIncrement = timeIncrementBase * pulseFactor;
     currentTime += timeIncrement; // Increment global currentTime
-    // --- End Time Update ---
+    // console.log(`draw.ts - Frame: ${frameCount}, CurrentTime: ${currentTime.toFixed(3)}`); // Optional DEBUG
+    // --- End Time Calculation ---
 
-    // --- ADDED: Handle Simple Animation ---
+
+    // --- Handle Simple Animation ---
     if (isAnimating) {
         const elapsedTime = Date.now() - animationStartTime;
         const progress = Math.min(elapsedTime / ANIMATION_DURATION, 1.0); // Clamp progress to 0-1
@@ -342,171 +276,199 @@ export function draw({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
     }
     // --- End Simple Animation Handling ---
 
+
     // --- Pass 1: Draw gradient to frameTexture (offscreen) ---
-    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, frameTexture, 0);
-    gl.viewport(0, 0, width, height);
-    gl.useProgram(gradientProgram);
+    // ADD call to renderer.renderGradientPass
+    const gradientUniforms: GradientUniforms = {
+        colorA: hexToRgb01Local("#000000"), // Use local helper for now
+        colorB: hexToRgb01Local("#FFFFFF"), // Use local helper for now
+        time: currentTime,
+        noiseCenter: NOISE_CENTER,
+        noiseWidth: NOISE_WIDTH,
+        noiseAmplitude: NOISE_AMPLITUDE, // Gradient noise amplitude
+        noiseSpeed: NOISE_SPEED,
+        noiseScale: NOISE_SCALE,
+        noiseOffsetScale: NOISE_OFFSET_SCALE,
+        waveAmplitude: WAVE_AMPLITUDE,
+        waveXScale: WAVE_XSCALE,
+        waveTimeScale: WAVE_TIMESCALE,
+        gridScale: GRID_SCALE,
+        gridRotation: GRID_ROTATION,
+        gridAxisScale: GRID_AXIS_SCALE,
+        gridWaveSpeed: GRID_WAVE_SPEED,
+    };
+    renderer.renderGradientPass(gradientUniforms);
 
-    // Set uniforms for B&W gradient pass
-    const colorA_Gradient = hexToRgb01("#000000");
-    const colorB_Gradient = hexToRgb01("#FFFFFF");
-    gl.uniform3fv(gl.getUniformLocation(gradientProgram, 'u_colorA'), colorA_Gradient);
-    gl.uniform3fv(gl.getUniformLocation(gradientProgram, 'u_colorB'), colorB_Gradient);
-    gl.uniform1f(gl.getUniformLocation(gradientProgram, 'u_time'), currentTime);
-    gl.uniform1f(gl.getUniformLocation(gradientProgram, 'u_noiseCenter'), NOISE_CENTER);
-    gl.uniform1f(gl.getUniformLocation(gradientProgram, 'u_noiseWidth'), NOISE_WIDTH);
-    gl.uniform1f(gl.getUniformLocation(gradientProgram, 'u_noiseAmplitude'), NOISE_AMPLITUDE);
-    gl.uniform1f(gl.getUniformLocation(gradientProgram, 'u_noiseSpeed'), NOISE_SPEED);
-    gl.uniform1f(gl.getUniformLocation(gradientProgram, 'u_noiseScale'), NOISE_SCALE);
-    gl.uniform1f(gl.getUniformLocation(gradientProgram, 'u_noiseOffsetScale'), NOISE_OFFSET_SCALE);
-    gl.uniform1f(gl.getUniformLocation(gradientProgram, 'u_waveAmplitude'), WAVE_AMPLITUDE);
-    gl.uniform1f(gl.getUniformLocation(gradientProgram, 'u_waveXScale'), WAVE_XSCALE);
-    gl.uniform1f(gl.getUniformLocation(gradientProgram, 'u_waveTimeScale'), WAVE_TIMESCALE);
-    gl.uniform1f(gl.getUniformLocation(gradientProgram, 'u_gridScale'), GRID_SCALE);
-    gl.uniform1f(gl.getUniformLocation(gradientProgram, 'u_gridRotation'), GRID_ROTATION);
-    gl.uniform2fv(gl.getUniformLocation(gradientProgram, 'u_gridAxisScale'), GRID_AXIS_SCALE);
-    gl.uniform1f(gl.getUniformLocation(gradientProgram, 'u_gridWaveSpeed'), GRID_WAVE_SPEED);
-
-    // Draw the grayscale gradient quad
-    gl.clearColor(0, 0, 0, 0); // Clear FBO with transparent black
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
     // --- Pass 2: Draw 2D elements to elementsTexture ---
     // Clear the 2D canvas (transparent)
-    elementsCtx.clearRect(0, 0, elementsCanvas.width, elementsCanvas.height);
+    elementsCtx.clearRect(0, 0, width, height);
 
-    // Draw the custom stretched hexagon
-    elementsCtx.fillStyle = 'black'; // Opaque black
-    elementsCtx.beginPath();
-    const centerX = elementsCanvas.width / 2;
-    const centerY = elementsCanvas.height / 2;
-    const R = 150; // Base radius, determines horizontal extent and angled side length
-
-    // Calculate vertex coordinates based on the desired shape:
-    // - Vertical sides (connecting side vertices) should have length 2*R
-    // - Angled sides (connecting top/bottom to sides) should have length R
-    const ryTop = R * 1.5;              // Top/Bottom Y offset (derived: 3R/2)
-    const ySide = R;                    // Side vertices Y offset (to make vertical side 2R)
-    const xSide = R * Math.sqrt(3) / 2; // Side vertices X offset (from regular hexagon)
-
-    // Define the 6 vertices relative to center
-    const points = [
-        { x: 0,       y: ryTop },  // 1. Top
-        { x: xSide,   y: ySide },  // 2. Top-Right
-        { x: xSide,   y: -ySide }, // 3. Bottom-Right
-        { x: 0,       y: -ryTop }, // 4. Bottom
-        { x: -xSide,  y: -ySide }, // 5. Bottom-Left
-        { x: -xSide,  y: ySide }   // 6. Top-Left
-    ];
-
-    // Move to the first vertex (Top)
-    elementsCtx.moveTo(centerX + points[0].x, centerY + points[0].y);
-
-    // Draw lines to subsequent vertices
-    for (let i = 1; i < points.length; i++) {
-        elementsCtx.lineTo(centerX + points[i].x, centerY + points[i].y);
+    // --- REVISED Hexagon Drawing Logic for Window View & Wrap-Around ---
+    if (SHAPE_CENTER_X === null) {
+        SHAPE_CENTER_X = width / 2; // Use width
+    }
+    if (HEXAGON_CENTER_X === null) {
+         HEXAGON_CENTER_X = width / 2; // Use width
     }
 
-    elementsCtx.closePath(); // Close the path to complete the hexagon
-    elementsCtx.fill();
+    // --- Define the fixed shape proportions ---
+    const R_SHAPE = 150;
+    const shape_hw = R_SHAPE * Math.sqrt(3) / 2;
+    const shape_vh = R_SHAPE;
+    const shape_yo = R_SHAPE * 1.5;
 
-    // Upload canvas to elementsTexture (use texture unit 0 temporarily)
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, elementsTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, elementsCanvas);
+    // Calculate slopes based on the fixed shape definition
+    const m_tl = shape_hw !== 0 ? (shape_yo - shape_vh) / shape_hw : 0;
+    const m_tr = shape_hw !== 0 ? (shape_vh - shape_yo) / shape_hw : 0;
+    const m_bl = shape_hw !== 0 ? (-shape_yo + shape_vh) / shape_hw : 0;
+    const m_br = shape_hw !== 0 ? (-shape_vh + shape_yo) / shape_hw : 0;
+    // --- End Shape Definition ---
+
+    // --- Get window parameters from sliders ---
+    const window_cx = HEXAGON_CENTER_X; // Center of the drawing *window*
+    const window_W = HEXAGON_WIDTH;     // Width of the drawing *window*
+    const window_hw = window_W / 2;     // Half-width of the window
+
+    // Fixed vertical center of the shape
+    const fixed_shape_cy = height / 2;
+
+    // --- Helper functions remain the same ---
+    function getTopRelY(x_rel_shape: number): number {
+        if (x_rel_shape <= 0) { // Left side
+            return m_tl * x_rel_shape + shape_yo;
+        } else { // Right side
+            return m_tr * x_rel_shape + shape_yo;
+        }
+    }
+    function getBottomRelY(x_rel_shape: number): number {
+        if (x_rel_shape <= 0) { // Left side
+            return m_bl * x_rel_shape - shape_yo;
+        } else { // Right side
+            return m_br * x_rel_shape - shape_yo;
+        }
+    }
+    // --- End Helper Functions ---
+
+    elementsCtx.strokeStyle = 'white';
+    elementsCtx.lineWidth = 1;
+
+    // --- Determine the *conceptual* X range of the window (can be outside [0, width]) ---
+    const x_iter_start = Math.floor(window_cx - window_hw);
+    const x_iter_end = Math.ceil(window_cx + window_hw);
+
+    // --- Iterate over the conceptual window range ---
+    for (let x_iter = x_iter_start; x_iter <= x_iter_end; x_iter++) {
+        // --- Calculate the actual canvas X coordinate with wrap-around ---
+        // The modulo operator handles the wrap-around correctly for both positive and negative x_iter
+        // Adding 'width' before the first modulo ensures the result is non-negative
+        const x_abs = ((x_iter % width) + width) % width;
+        const x_abs_floor = Math.floor(x_abs); // Use floor for consistency if needed, though drawing uses center
+
+        // Calculate this pixel's position relative to the *fixed shape's center*
+        // IMPORTANT: Use x_iter (the conceptual position) not x_abs (the wrapped position)
+        //            to calculate the position relative to the shape center.
+        const x_rel_shape = x_iter - SHAPE_CENTER_X;
+
+        // Calculate absolute top and bottom y coordinates using the shape-relative helpers
+        // These lines now extend indefinitely based on the conceptual x_iter position
+        const y_top_abs = fixed_shape_cy + getTopRelY(x_rel_shape);
+        const y_bottom_abs = fixed_shape_cy + getBottomRelY(x_rel_shape);
+
+        // Clamp final Y coordinates to canvas bounds
+        const y_draw_top = Math.max(0, Math.min(height - 1, y_top_abs));
+        const y_draw_bottom = Math.max(0, Math.min(height - 1, y_bottom_abs));
+
+        // Draw the vertical line segment if valid (top is above bottom after clamping)
+        // Draw it at the *wrapped* canvas coordinate x_abs
+        if (y_draw_top >= y_draw_bottom) {
+             elementsCtx.beginPath();
+             // Add 0.5 to the *wrapped* x_abs for sharp 1px vertical lines
+             elementsCtx.moveTo(x_abs + 0.5, y_draw_bottom);
+             elementsCtx.lineTo(x_abs + 0.5, y_draw_top);
+             elementsCtx.stroke();
+        }
+        // Removed the check against shape_hw - we want the lines to extend
+    }
+    // --- End REVISED Hexagon Drawing Logic ---
+
+    // Upload canvas to elementsTexture
+    renderer.uploadElementsTexture(elementsCanvas);
+
 
     // --- Pass 3: Blur elementsTexture into blurredElementsTexture ---
-    let readTex = elementsTexture;
-    let writeTex = blurredElementsTexture;
-    let finalBlurredTexture = elementsTexture; // Default if BLUR_PASSES is 0
+    // REMOVE old blur logic
+    // let readTex = elementsTexture;
+    // let writeTex = blurredElementsTexture;
+    // let finalBlurredTexture = elementsTexture; // Default if BLUR_PASSES is 0
+    // if (BLUR_PASSES > 0 && BLUR_RADIUS > 0) {
+    //     gl.useProgram(blurProgram);
+    //     gl.uniform2f(gl.getUniformLocation(blurProgram, "u_resolution"), width, height);
+    //     // ... set uniforms, bind FBO, loop, draw, swap ...
+    //     finalBlurredTexture = readTex;
+    //     gl.bindFramebuffer(gl.FRAMEBUFFER, null); // Unbind the blur FBO
+    // } else {
+    //     finalBlurredTexture = elementsTexture; // Use original if no blur
+    // }
 
-    if (BLUR_PASSES > 0 && BLUR_RADIUS > 0) {
-        gl.useProgram(blurProgram);
-        gl.uniform2f(gl.getUniformLocation(blurProgram, "u_resolution"), width, height);
-        gl.uniform1f(gl.getUniformLocation(blurProgram, "u_blurRadius"), BLUR_RADIUS);
-        gl.uniform1f(gl.getUniformLocation(blurProgram, "u_time"), currentTime); // Pass time if blur shader uses it
-        gl.uniform1f(gl.getUniformLocation(blurProgram, "u_flipY"), 0.0); // IMPORTANT: Flip Y is 0.0 for FBO rendering
+    // ADD call to renderer.applyBlurPasses
+    const blurUniforms: BlurUniforms = {
+        resolution: [width, height],
+        radius: BLUR_RADIUS,
+        time: currentTime // Pass time if needed by blur shader
+    };
+    // The applyBlurPasses method returns the texture containing the final result
+    const finalBlurredElementsTexture = renderer.applyBlurPasses(blurUniforms, BLUR_PASSES);
 
-        gl.bindFramebuffer(gl.FRAMEBUFFER, blurFramebuffer); // Use the dedicated blur FBO
-        gl.viewport(0, 0, width, height); // Set viewport for FBO
-
-        for (let i = 0; i < BLUR_PASSES; ++i) {
-            // Set the target texture for this pass
-            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, writeTex, 0);
-
-            // Bind the texture to read from
-            gl.activeTexture(gl.TEXTURE0); // Use texture unit 0 for blur input
-            gl.bindTexture(gl.TEXTURE_2D, readTex);
-            gl.uniform1i(gl.getUniformLocation(blurProgram, "u_image"), 0);
-
-            // Execute blur pass
-            gl.clearColor(0, 0, 0, 0); // Clear FBO just in case
-            gl.clear(gl.COLOR_BUFFER_BIT);
-            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-            // Swap textures for next pass
-            [readTex, writeTex] = [writeTex, readTex]; // Ping-pong
-        }
-        finalBlurredTexture = readTex; // The last texture read from is the final result
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null); // Unbind the blur FBO
-    } else {
-        finalBlurredTexture = elementsTexture; // Use original if no blur
-    }
+    // DEBUG: Log the texture object being passed to composite
+    // console.log('Texture passed to composite:', finalBlurredElementsTexture);
+    // DEBUG: Check if it's the expected texture when blur is off
+    // if (renderer && BLUR_PASSES <= 0 && finalBlurredElementsTexture !== renderer.elementsInputTexture) {
+    //     console.error("DEBUG: Blur pass returned unexpected texture!");
+    // }
 
 
     // --- Pass 4: Composite to screen using spectral shader ---
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null); // Render to screen
-    gl.viewport(0, 0, width, height);
-    gl.useProgram(spectralCompositeProgram);
+    // REMOVE old WebGL calls
+    // gl.bindFramebuffer(gl.FRAMEBUFFER, null); // Render to screen
+    // gl.viewport(0, 0, width, height);
+    // gl.useProgram(spectralCompositeProgram);
+    // // Bind gradient texture to unit 0
+    // gl.activeTexture(gl.TEXTURE0);
+    // gl.bindTexture(gl.TEXTURE_2D, frameTexture);
+    // gl.uniform1i(gl.getUniformLocation(spectralCompositeProgram, "u_gradientTex"), 0);
+    // // Bind blurred elements texture to unit 1
+    // gl.activeTexture(gl.TEXTURE1);
+    // gl.bindTexture(gl.TEXTURE_2D, finalBlurredTexture); // Use the potentially blurred texture
+    // gl.uniform1i(gl.getUniformLocation(spectralCompositeProgram, "u_elementsTex"), 1);
+    // // Set palette color uniforms
+    // const colorA_Palette = hexToRgb01(GRADIENT_COLOR_A);
+    // // ... set uniforms one by one ...
+    // gl.clearColor(0, 0, 0, 1); // Clear with opaque black
+    // gl.clear(gl.COLOR_BUFFER_BIT);
+    // // Draw the final composited quad
+    // gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-    // Bind gradient texture to unit 0
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, frameTexture);
-    gl.uniform1i(gl.getUniformLocation(spectralCompositeProgram, "u_gradientTex"), 0);
-
-    // Bind blurred elements texture to unit 1
-    gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, finalBlurredTexture);
-    gl.uniform1i(gl.getUniformLocation(spectralCompositeProgram, "u_elementsTex"), 1);
-
-    // Set palette color uniforms
-    const colorA_Palette = hexToRgb01(GRADIENT_COLOR_A);
-    const colorB_Palette = hexToRgb01(GRADIENT_COLOR_B);
-    const colorC_Palette = hexToRgb01(PALETTE_COLOR_C);
-    const colorD_Palette = hexToRgb01(PALETTE_COLOR_D);
-    gl.uniform3fv(gl.getUniformLocation(spectralCompositeProgram, "u_colorA"), colorA_Palette);
-    gl.uniform3fv(gl.getUniformLocation(spectralCompositeProgram, "u_colorB"), colorB_Palette);
-    gl.uniform3fv(gl.getUniformLocation(spectralCompositeProgram, "u_colorC"), colorC_Palette);
-    gl.uniform3fv(gl.getUniformLocation(spectralCompositeProgram, "u_colorD"), colorD_Palette);
-
-    // Set u_flipY for drawing to the screen
-    gl.uniform1f(gl.getUniformLocation(spectralCompositeProgram, "u_flipY"), 1.0);
-
-    // --- Pass Noise/Grid uniforms for displacement ---
-    gl.uniform1f(gl.getUniformLocation(spectralCompositeProgram, 'u_time'), currentTime);
-    gl.uniform1f(gl.getUniformLocation(spectralCompositeProgram, 'u_noiseSpeed'), NOISE_SPEED);
-    gl.uniform1f(gl.getUniformLocation(spectralCompositeProgram, 'u_noiseScale'), NOISE_SCALE);
-    gl.uniform1f(gl.getUniformLocation(spectralCompositeProgram, 'u_gridScale'), GRID_SCALE);
-    gl.uniform1f(gl.getUniformLocation(spectralCompositeProgram, 'u_gridRotation'), GRID_ROTATION);
-    gl.uniform2fv(gl.getUniformLocation(spectralCompositeProgram, 'u_gridAxisScale'), GRID_AXIS_SCALE);
-    gl.uniform1f(gl.getUniformLocation(spectralCompositeProgram, 'u_noiseAmplitude'), NOISE_AMPLITUDE);
-    // --- Use NEW Shape-Specific Uniforms ---
-    // NOTE: We will rename these uniforms in the shader itself in the next step
-    gl.uniform1f(gl.getUniformLocation(spectralCompositeProgram, 'u_shapeNoiseScale'), SHAPE_NOISE_SCALE);
-    gl.uniform1f(gl.getUniformLocation(spectralCompositeProgram, 'u_shapeNoiseAmplitude'), SHAPE_NOISE_AMPLITUDE);
-    // --- ADDED: High Frequency Shape Noise ---
-    gl.uniform1f(gl.getUniformLocation(spectralCompositeProgram, 'u_hfShapeNoiseScale'), HIGH_FREQ_SHAPE_NOISE_SCALE);
-    gl.uniform1f(gl.getUniformLocation(spectralCompositeProgram, 'u_hfShapeNoiseAmount'), HIGH_FREQ_SHAPE_NOISE_AMOUNT);
-    // --- End Uniforms ---
-
-    // Clear screen before drawing final texture
-    gl.clearColor(0, 0, 0, 1); // Clear with opaque black
-    gl.clear(gl.COLOR_BUFFER_BIT);
-
-    // Draw the final composited quad
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    // ADD call to renderer.renderCompositePass
+    const compositeUniforms: CompositeUniforms = {
+        time: currentTime,
+        noiseSpeed: NOISE_SPEED,
+        noiseScale: NOISE_SCALE,     // Gradient noise scale (used for displacement)
+        noiseAmplitude: NOISE_AMPLITUDE, // Gradient noise amplitude (used for displacement)
+        gridScale: GRID_SCALE,
+        gridRotation: GRID_ROTATION,
+        gridAxisScale: GRID_AXIS_SCALE,
+        shapeNoiseScale: SHAPE_NOISE_SCALE,
+        shapeNoiseAmplitude: SHAPE_NOISE_AMPLITUDE,
+        hfShapeNoiseScale: HIGH_FREQ_SHAPE_NOISE_SCALE,
+        hfShapeNoiseAmount: HIGH_FREQ_SHAPE_NOISE_AMOUNT,
+        colorA: hexToRgb01Local(GRADIENT_COLOR_A), // Use local helper
+        colorB: hexToRgb01Local(GRADIENT_COLOR_B), // Use local helper
+        colorC: hexToRgb01Local(PALETTE_COLOR_C),  // Use local helper
+        colorD: hexToRgb01Local(PALETTE_COLOR_D),  // Use local helper
+    };
+    // Pass the texture returned by applyBlurPasses
+    renderer.renderCompositePass(compositeUniforms, finalBlurredElementsTexture);
 
     frameCount++;
 }
@@ -627,19 +589,34 @@ async function saveCurrentFrame(canvas: HTMLCanvasElement) {
 }
 
 export function start(contexts: CanvasContexts) {
+    // {{ Moved setup call to the beginning }}
+    setup(contexts);
+
     // Modify animation loop for conditional saving
     async function animate() {
-        draw(contexts);
-        
-        if (isRendering) {
-            // Need to pass the correct canvas (canvasWebGL) to saveCurrentFrame
-            await saveCurrentFrame(contexts.canvasWebGL);
-            // Only request next frame if still rendering
+        // console.log(`Animate frame: ${frameCount}`); // DEBUG: Verify loop execution
+
+        // Check if renderer is initialized before drawing
+        if (renderer) {
+            draw(contexts);
+
             if (isRendering) {
-            requestAnimationFrame(animate);
+                // Need to pass the correct canvas (canvasWebGL) to saveCurrentFrame
+                await saveCurrentFrame(contexts.canvasWebGL);
+                // Only request next frame if still rendering
+                if (isRendering) {
+                    requestAnimationFrame(animate);
+                } else {
+                    // If rendering stopped, ensure animation continues if desired
+                    requestAnimationFrame(animate);
+                }
+            } else {
+                requestAnimationFrame(animate); // Continue animation even when not saving
             }
         } else {
-            requestAnimationFrame(animate); // Continue animation even when not saving
+             // Handle case where renderer isn't ready yet (optional)
+             console.warn("Renderer not initialized, delaying animation frame.");
+             requestAnimationFrame(animate); // Try again next frame
         }
     }
 
@@ -673,24 +650,23 @@ export function start(contexts: CanvasContexts) {
     const gridScaleValueSpan = document.getElementById('grid-scale-value');
     const gridWaveSpeedSlider = document.getElementById('grid-wave-speed-slider') as HTMLInputElement;
     const gridWaveSpeedValueSpan = document.getElementById('grid-wave-speed-value');
-
-    // --- ADDED: Get new shape sliders ---
     const shapeAmpSlider = document.getElementById('shape-amplitude-slider') as HTMLInputElement;
     const shapeAmpValueSpan = document.getElementById('shape-amplitude-value');
     const shapeScaleSlider = document.getElementById('shape-scale-slider') as HTMLInputElement;
     const shapeScaleValueSpan = document.getElementById('shape-scale-value');
-
-    // --- ADDED: Get new HF shape sliders ---
     const hfShapeAmountSlider = document.getElementById('hf-shape-amount-slider') as HTMLInputElement;
     const hfShapeAmountValueSpan = document.getElementById('hf-shape-amount-value');
     const hfShapeScaleSlider = document.getElementById('hf-shape-scale-slider') as HTMLInputElement;
     const hfShapeScaleValueSpan = document.getElementById('hf-shape-scale-value');
-
-    // --- ADDED: Get new time pulse sliders ---
     const timePulseFreqSlider = document.getElementById('time-pulse-freq-slider') as HTMLInputElement;
     const timePulseFreqValueSpan = document.getElementById('time-pulse-freq-value');
     const timePulseAmountSlider = document.getElementById('time-pulse-amount-slider') as HTMLInputElement;
     const timePulseAmountValueSpan = document.getElementById('time-pulse-amount-value');
+    const hexagonCenterSlider = document.getElementById('hexagon-center-slider') as HTMLInputElement;
+    const hexagonCenterValueSpan = document.getElementById('hexagon-center-value');
+    const hexagonWidthSlider = document.getElementById('hexagon-width-slider') as HTMLInputElement;
+    const hexagonWidthValueSpan = document.getElementById('hexagon-width-value');
+
 
     // --- Toggle Controls Button Setup ---
     const toggleBtn = document.getElementById('toggle-controls-button') as HTMLButtonElement;
@@ -863,7 +839,7 @@ export function start(contexts: CanvasContexts) {
     }
     // --- END SLIDER SETUP ---
 
-    // --- ADDED: Listeners for new time pulse sliders ---
+    // --- Listeners for time pulse sliders ---
     if (timePulseFreqSlider && timePulseFreqValueSpan) {
         // Example scale: 0 to 5 Hz, linear
         timePulseFreqSlider.value = (TIME_PULSE_FREQUENCY * 20.0).toString(); // 0-100 maps to 0-5
@@ -886,122 +862,53 @@ export function start(contexts: CanvasContexts) {
     }
     // --- END SLIDER SETUP ---
 
-    setup(contexts);
-    animate();
+    // --- Listeners for Hexagon (Window) sliders ---
+    if (hexagonCenterSlider && hexagonCenterValueSpan) {
+        hexagonCenterSlider.max = contexts.canvasWebGL.width.toString();
+        if (HEXAGON_CENTER_X !== null) { // Should be initialized now
+             hexagonCenterSlider.value = HEXAGON_CENTER_X.toString();
+             hexagonCenterValueSpan.textContent = HEXAGON_CENTER_X.toFixed(0);
+        } else { // Defensive fallback
+            console.error("HEXAGON_CENTER_X (window center) is unexpectedly null after setup call!");
+            const defaultCenter = contexts.canvasWebGL.width / 2;
+            hexagonCenterSlider.value = defaultCenter.toString();
+            hexagonCenterValueSpan.textContent = defaultCenter.toFixed(0);
+        }
+
+        hexagonCenterSlider.addEventListener('input', (e) => {
+            const sliderValue = parseFloat((e.target as HTMLInputElement).value);
+            HEXAGON_CENTER_X = sliderValue; // Update the window center variable
+            hexagonCenterValueSpan.textContent = HEXAGON_CENTER_X.toFixed(0);
+        });
+    }
+
+    if (hexagonWidthSlider && hexagonWidthValueSpan) {
+        hexagonWidthSlider.value = HEXAGON_WIDTH.toString(); // Initial window width
+        hexagonWidthValueSpan.textContent = HEXAGON_WIDTH.toFixed(0);
+        hexagonWidthSlider.addEventListener('input', (e) => {
+            const sliderValue = parseFloat((e.target as HTMLInputElement).value);
+            HEXAGON_WIDTH = sliderValue; // Update the window width variable
+            hexagonWidthValueSpan.textContent = HEXAGON_WIDTH.toFixed(0);
+        });
+    }
+    // --- END SLIDER LISTENERS ---
+
+    animate(); // Start the animation loop
 }
 
-// Keep initGradientProgram - no ! needed for gl, positionBuffer, texCoordBuffer
-function initGradientProgram(gl: WebGLRenderingContext) {
-    const vertexShader = gl.createShader(gl.VERTEX_SHADER); // Removed !
-    if (!vertexShader) throw new Error("Couldn't create vertex shader"); // Added check
-    gl.shaderSource(vertexShader, passthroughVertexShader);
-    gl.compileShader(vertexShader);
-    // TODO: Add error checking
+// REMOVE initGradientProgram function
+// function initGradientProgram(gl: WebGLRenderingContext) { ... }
 
-    const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER); // Removed !
-    if (!fragmentShader) throw new Error("Couldn't create fragment shader"); // Added check
-    gl.shaderSource(fragmentShader, compositeGridGradientFragmentShader);
-    gl.compileShader(fragmentShader);
-    // TODO: Add error checking
+// REMOVE initBlurProgram function
+// function initBlurProgram(gl: WebGLRenderingContext) { ... }
 
-    const localProgram = gl.createProgram(); // Removed !
-    if (!localProgram) throw new Error("Couldn't create program"); // Added check
-    gradientProgram = localProgram; // Assign to global
-    gl.attachShader(gradientProgram, vertexShader);
-    gl.attachShader(gradientProgram, fragmentShader);
-    gl.linkProgram(gradientProgram);
-    // TODO: Add error checking
+// REMOVE initSpectralCompositeProgram function
+// function initSpectralCompositeProgram(gl: WebGLRenderingContext) { ... }
 
-    // Set up attributes using global buffers
-    gl.useProgram(gradientProgram); // Use program before getting locations
-    const positionLocation = gl.getAttribLocation(gradientProgram, "a_position");
-    gl.enableVertexAttribArray(positionLocation);
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer); // Bind correct buffer
-    gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
-
-    const texCoordLocation = gl.getAttribLocation(gradientProgram, "a_texCoord");
-    gl.enableVertexAttribArray(texCoordLocation);
-    gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer); // Bind correct buffer
-    gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
-}
-
-// --- Step 9: Implement initBlurProgram ---
-function initBlurProgram(gl: WebGLRenderingContext) {
-    const vertexShader = gl.createShader(gl.VERTEX_SHADER);
-    if (!vertexShader) throw new Error("Couldn't create vertex shader for blur");
-    gl.shaderSource(vertexShader, passthroughVertexShader);
-    gl.compileShader(vertexShader);
-    // TODO: Check compile status: gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)
-
-    const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
-    if (!fragmentShader) throw new Error("Couldn't create fragment shader for blur");
-    gl.shaderSource(fragmentShader, blurFragmentShader); // Use blur shader source
-    gl.compileShader(fragmentShader);
-    // TODO: Check compile status: gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)
-
-    const localProgram = gl.createProgram();
-    if (!localProgram) throw new Error("Couldn't create blur program");
-    blurProgram = localProgram; // Assign to the global variable
-    gl.attachShader(blurProgram, vertexShader);
-    gl.attachShader(blurProgram, fragmentShader);
-    gl.linkProgram(blurProgram);
-    // TODO: Check link status: gl.getProgramParameter(blurProgram, gl.LINK_STATUS)
-
-    // Set up attributes using global buffers
-    gl.useProgram(blurProgram); // Use program before getting locations
-
-    const positionLocation = gl.getAttribLocation(blurProgram, "a_position");
-    gl.enableVertexAttribArray(positionLocation);
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer); // Bind correct buffer
-    gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
-
-    const texCoordLocation = gl.getAttribLocation(blurProgram, "a_texCoord");
-    gl.enableVertexAttribArray(texCoordLocation);
-    gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer); // Bind correct buffer
-    gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
-}
-
-// Remove placeholder/old initPaletteProgram - Will be replaced by initSpectralCompositeProgram
-// function initPaletteProgram(gl: WebGLRenderingContext) { ... }
-
-
-// --- Step 10: Implement initSpectralCompositeProgram ---
-function initSpectralCompositeProgram(gl: WebGLRenderingContext) {
-    const vertexShader = gl.createShader(gl.VERTEX_SHADER);
-    if (!vertexShader) throw new Error("Couldn't create vertex shader for composite");
-    gl.shaderSource(vertexShader, passthroughVertexShader);
-    gl.compileShader(vertexShader);
-    // TODO: Check compile status
-
-    const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
-    if (!fragmentShader) throw new Error("Couldn't create fragment shader for composite");
-    gl.shaderSource(fragmentShader, noiseSpectralCompositeFragmentShader);
-    gl.compileShader(fragmentShader);
-    // TODO: Check compile status
-
-    const localProgram = gl.createProgram();
-    if (!localProgram) throw new Error("Couldn't create spectral composite program");
-    spectralCompositeProgram = localProgram;
-    gl.attachShader(spectralCompositeProgram, vertexShader);
-    gl.attachShader(spectralCompositeProgram, fragmentShader);
-    gl.linkProgram(spectralCompositeProgram);
-    // TODO: Check link status
-
-    // Set up attributes
-    gl.useProgram(spectralCompositeProgram);
-    const positionLocation = gl.getAttribLocation(spectralCompositeProgram, "a_position");
-    gl.enableVertexAttribArray(positionLocation);
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
-
-    const texCoordLocation = gl.getAttribLocation(spectralCompositeProgram, "a_texCoord");
-    gl.enableVertexAttribArray(texCoordLocation);
-    gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
-    gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
-}
 
 // Keep helper function to convert hex to [r, g, b] in 0..1
-function hexToRgb01(hex: string): [number, number, number] {
+// We need this locally for the uniform construction until we decide where it lives permanently
+function hexToRgb01Local(hex: string): [number, number, number] {
     const n = parseInt(hex.replace('#', ''), 16);
     return [
         ((n >> 16) & 0xff) / 255,
