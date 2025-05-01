@@ -36,6 +36,15 @@ let currentFrameNumber = 0;
 let dirHandle: FileSystemDirectoryHandle | null = null;
 const TOTAL_FRAMES = 5550; // Example value, adjust as needed
 
+// --- ADDED: Simple Animation State ---
+let isAnimating = false;
+let animationStartTime = 0;
+const ANIMATION_DURATION = 2000; // Duration in milliseconds (e.g., 2 seconds)
+let startValues = { gridScale: 0, shapeAmplitude: 0, gradientAmplitude: 0 };
+let endValues = { gridScale: 1.0, shapeAmplitude: 6.0, gradientAmplitude: 1.0 };
+// --- End Animation State ---
+
+
 // --- Step 2: Add Blur Parameters ---
 const BLUR_RADIUS = 3.0; // Example blur radius
 const BLUR_PASSES = 0;   // Example blur passes
@@ -142,6 +151,13 @@ let PALETTE_COLOR_F = '#F2585B';
 // const PALETTE_COLOR_C = '#261C39'; // Color for opaque black elements
 // const PALETTE_COLOR_D = '#AED4596'; // Color for opaque white elements (unused for now)
 
+// --- ADDED: Snapshot State ---
+let snapshotValues = {
+    gridScale: GRID_SCALE, // Initialize with current defaults
+    shapeAmplitude: SHAPE_NOISE_AMPLITUDE,
+    gradientAmplitude: NOISE_AMPLITUDE
+};
+// --- End Snapshot State ---
 
 
 // Add back frame padding helper
@@ -300,6 +316,31 @@ export function draw({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
     const timeIncrement = timeIncrementBase * pulseFactor;
     currentTime += timeIncrement; // Increment global currentTime
     // --- End Time Update ---
+
+    // --- ADDED: Handle Simple Animation ---
+    if (isAnimating) {
+        const elapsedTime = Date.now() - animationStartTime;
+        const progress = Math.min(elapsedTime / ANIMATION_DURATION, 1.0); // Clamp progress to 0-1
+
+        // Linear interpolation (lerp)
+        const lerp = (start: number, end: number, t: number) => start * (1 - t) + end * t;
+
+        GRID_SCALE = lerp(startValues.gridScale, endValues.gridScale, progress);
+        SHAPE_NOISE_AMPLITUDE = lerp(startValues.shapeAmplitude, endValues.shapeAmplitude, progress);
+        NOISE_AMPLITUDE = lerp(startValues.gradientAmplitude, endValues.gradientAmplitude, progress);
+
+        // TODO: Update sliders visually if desired (more complex)
+
+        if (progress >= 1.0) {
+            isAnimating = false;
+            console.log('Animation complete.');
+            // Optionally ensure final values are exact
+            GRID_SCALE = endValues.gridScale;
+            SHAPE_NOISE_AMPLITUDE = endValues.shapeAmplitude;
+            NOISE_AMPLITUDE = endValues.gradientAmplitude;
+        }
+    }
+    // --- End Simple Animation Handling ---
 
     // --- Pass 1: Draw gradient to frameTexture (offscreen) ---
     gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
@@ -470,6 +511,77 @@ export function draw({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
     frameCount++;
 }
 
+// --- ADDED: Function to start the simple animation ---
+function animateParameters() {
+    if (isAnimating) return; // Don't restart if already animating
+
+    isAnimating = true;
+    animationStartTime = Date.now();
+
+    // Store starting values
+    startValues.gridScale = GRID_SCALE;
+    startValues.shapeAmplitude = SHAPE_NOISE_AMPLITUDE;
+    startValues.gradientAmplitude = NOISE_AMPLITUDE;
+
+    console.log('Starting animation...');
+}
+// --- End Animate Parameters function ---
+
+// --- ADDED: Function to store current parameter values ---
+function takeSnapshot() {
+    snapshotValues.gridScale = GRID_SCALE;
+    snapshotValues.shapeAmplitude = SHAPE_NOISE_AMPLITUDE;
+    snapshotValues.gradientAmplitude = NOISE_AMPLITUDE;
+    console.log('Snapshot taken:', snapshotValues);
+}
+// --- End Snapshot function ---
+
+// --- MODIFY: Rename and change logic for Reset function ---
+// Function to reset parameters based on the last snapshot
+function resetParametersToSnapshot() {
+    // Stop any ongoing animation
+    if (isAnimating) {
+        isAnimating = false;
+        console.log('Animation stopped by Reset.');
+    }
+
+    // Restore values from snapshot
+    GRID_SCALE = snapshotValues.gridScale;
+    SHAPE_NOISE_AMPLITUDE = snapshotValues.shapeAmplitude;
+    NOISE_AMPLITUDE = snapshotValues.gradientAmplitude;
+
+    console.log('Parameters reset to snapshot:', snapshotValues);
+
+    // --- ADDED: Update sliders and value spans to match snapshot ---
+    const gridScaleSlider = document.getElementById('grid-scale-slider') as HTMLInputElement | null;
+    const gridScaleValueSpan = document.getElementById('grid-scale-value');
+    if (gridScaleSlider && gridScaleValueSpan) {
+        // Reverse the quadratic scale calculation to set slider position
+        // GRID_SCALE = 1.0 + s*s * 63.0  => s = sqrt((GRID_SCALE - 1.0) / 63.0)
+        const s_grid = Math.sqrt(Math.max(0, (GRID_SCALE - 1.0)) / 63.0); // Ensure non-negative arg for sqrt
+        gridScaleSlider.value = (s_grid * 100.0).toString();
+        gridScaleValueSpan.textContent = GRID_SCALE.toFixed(2);
+    }
+
+    const shapeAmpSlider = document.getElementById('shape-amplitude-slider') as HTMLInputElement | null;
+    const shapeAmpValueSpan = document.getElementById('shape-amplitude-value');
+    if (shapeAmpSlider && shapeAmpValueSpan) {
+        // SHAPE_NOISE_AMPLITUDE = sliderValue / 25.0 => sliderValue = SHAPE_NOISE_AMPLITUDE * 25.0
+        shapeAmpSlider.value = (SHAPE_NOISE_AMPLITUDE * 25.0).toString();
+        shapeAmpValueSpan.textContent = SHAPE_NOISE_AMPLITUDE.toFixed(2);
+    }
+
+    const noiseAmpSlider = document.getElementById('noise-amplitude-slider') as HTMLInputElement | null;
+    const noiseAmpValueSpan = document.getElementById('noise-amplitude-value');
+    if (noiseAmpSlider && noiseAmpValueSpan) {
+        // NOISE_AMPLITUDE = sliderValue / 25.0 => sliderValue = NOISE_AMPLITUDE * 25.0
+        noiseAmpSlider.value = (NOISE_AMPLITUDE * 25.0).toString();
+        noiseAmpValueSpan.textContent = NOISE_AMPLITUDE.toFixed(2);
+    }
+    // --- End Slider Updates ---
+}
+// --- End Reset Parameters function ---
+
 // Add back rendering control functions
 async function startRendering() {
     try {
@@ -534,7 +646,22 @@ export function start(contexts: CanvasContexts) {
     // Add back render button listener
     const renderButton = document.querySelector('#render-button');
     renderButton?.addEventListener('click', startRendering);
-    
+
+    // --- ADDED: Animate button listener ---
+    const animateButton = document.querySelector('#animate-button');
+    animateButton?.addEventListener('click', animateParameters);
+    // --- End Animate button listener ---
+
+    // --- MODIFY: Update Reset button listener ---
+    const resetButton = document.querySelector('#reset-button');
+    resetButton?.addEventListener('click', resetParametersToSnapshot); // Use the updated function
+    // --- End Reset button listener ---
+
+    // --- ADDED: Snapshot button listener ---
+    const snapshotButton = document.querySelector('#snapshot-button');
+    snapshotButton?.addEventListener('click', takeSnapshot);
+    // --- End Snapshot button listener ---
+
     // --- SLIDER SETUP ---
     const noiseAmpSlider = document.getElementById('noise-amplitude-slider') as HTMLInputElement;
     const noiseAmpValueSpan = document.getElementById('noise-amplitude-value');

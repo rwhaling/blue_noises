@@ -63,23 +63,27 @@ html, body {
   margin-bottom: 40px;
 }
 
-#render-button {
-  background-color: #2C8C99;
+/* General style for control buttons */
+.control-button {
+  background-color: #4a4a4a;
   color: white;
   border: none;
-  padding: 12px 24px;
-  font-size: 16px;
+  padding: 8px 12px; /* Adjusted padding slightly */
+  font-size: 14px;   /* Adjusted font size slightly */
   border-radius: 4px;
   cursor: pointer;
   transition: background-color 0.2s ease;
+  height: 40px; /* Example: Explicit height */
+  line-height: 1; /* Adjust line-height for vertical text centering */
+  box-sizing: border-box; /* Include padding in height */
 }
 
-#render-button:hover {
-  background-color: #3DA7B6;
+.control-button:hover {
+  background-color: #5a5a5a;
 }
 
-#render-button:active {
-  background-color: #247683;
+.control-button:active {
+  background-color: #3a3a3a; /* Added active state for consistency */
 }
 
 #slider-container {
