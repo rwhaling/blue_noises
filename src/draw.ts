@@ -186,9 +186,11 @@ function padFrameNumber(num: number): string {
 // --- ADDED: Fixed Shape Center ---
 let SHAPE_CENTER_X: number | null = null;
 
-// --- ADDED: Hexagon Drawing Parameters ---
-let HEXAGON_CENTER_X: number | null = null; // Renamed conceptually to WINDOW_CENTER_X
-let HEXAGON_WIDTH = 150 * Math.sqrt(3);    // Renamed conceptually to WINDOW_WIDTH
+// --- UPDATED: Hexagon Pulse/Window Parameters ---
+let HEXAGON_PULSE_START: number | null = null; // Renamed from HEXAGON_CENTER_X
+let HEXAGON_WIDTH = 150 * Math.sqrt(3);
+let HEXAGON_PULSE_OFFSET = 0.0; // NEW: Offset from -1 to 1
+let hexagonPhase = 0.0; // NEW: Accumulated phase/offset
 
 export function setup({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
     // REMOVE old initWebGL call
@@ -226,8 +228,8 @@ export function setup({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
 
     // Initialize SHAPE_CENTER_X (fixed)
     SHAPE_CENTER_X = canvasWebGL.width / 2;
-    // Initialize HEXAGON_CENTER_X (controlled by slider, defaults to center)
-    HEXAGON_CENTER_X = canvasWebGL.width / 2;
+    // Initialize HEXAGON_PULSE_START (controlled by slider, defaults to center)
+    HEXAGON_PULSE_START = canvasWebGL.width / 2; // Still default to center for initial load
 }
 
 export function draw({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
@@ -250,6 +252,8 @@ export function draw({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
     // console.log(`draw.ts - Frame: ${frameCount}, CurrentTime: ${currentTime.toFixed(3)}`); // Optional DEBUG
     // --- End Time Calculation ---
 
+    // --- Increment Hexagon Phase ---
+    hexagonPhase += HEXAGON_PULSE_OFFSET; // Update phase based on offset slider value
 
     // --- Handle Simple Animation ---
     if (isAnimating) {
@@ -301,36 +305,27 @@ export function draw({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
 
 
     // --- Pass 2: Draw 2D elements to elementsTexture ---
-    // Clear the 2D canvas (transparent)
     elementsCtx.clearRect(0, 0, width, height);
 
-    // --- REVISED Hexagon Drawing Logic for Window View & Wrap-Around ---
-    if (SHAPE_CENTER_X === null) {
-        SHAPE_CENTER_X = width / 2; // Use width
-    }
-    if (HEXAGON_CENTER_X === null) {
-         HEXAGON_CENTER_X = width / 2; // Use width
-    }
+    // --- REVISED Hexagon Drawing Logic for Periodic Wrap-Around ---
+    if (SHAPE_CENTER_X === null) { SHAPE_CENTER_X = width / 2; }
+    if (HEXAGON_PULSE_START === null) { HEXAGON_PULSE_START = width / 2; }
 
     // --- Define the fixed shape proportions ---
     const R_SHAPE = 150;
     const shape_hw = R_SHAPE * Math.sqrt(3) / 2;
     const shape_vh = R_SHAPE;
     const shape_yo = R_SHAPE * 1.5;
-
-    // Calculate slopes based on the fixed shape definition
     const m_tl = shape_hw !== 0 ? (shape_yo - shape_vh) / shape_hw : 0;
     const m_tr = shape_hw !== 0 ? (shape_vh - shape_yo) / shape_hw : 0;
     const m_bl = shape_hw !== 0 ? (-shape_yo + shape_vh) / shape_hw : 0;
     const m_br = shape_hw !== 0 ? (-shape_vh + shape_yo) / shape_hw : 0;
     // --- End Shape Definition ---
 
-    // --- Get window parameters from sliders ---
-    const window_cx = HEXAGON_CENTER_X; // Center of the drawing *window*
-    const window_W = HEXAGON_WIDTH;     // Width of the drawing *window*
-    const window_hw = window_W / 2;     // Half-width of the window
-
-    // Fixed vertical center of the shape
+    // --- Get window parameters from sliders and internal phase ---
+    const pulse_start_base = HEXAGON_PULSE_START;
+    const window_W = HEXAGON_WIDTH;
+    const effective_pulse_start = pulse_start_base + hexagonPhase;
     const fixed_shape_cy = height / 2;
 
     // --- Helper functions remain the same ---
@@ -353,25 +348,20 @@ export function draw({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
     elementsCtx.strokeStyle = 'white';
     elementsCtx.lineWidth = 1;
 
-    // --- Determine the *conceptual* X range of the window (can be outside [0, width]) ---
-    const x_iter_start = Math.floor(window_cx - window_hw);
-    const x_iter_end = Math.ceil(window_cx + window_hw);
+    // --- Determine the *conceptual* X range based on effective start and width ---
+    const x_iter_start = Math.floor(effective_pulse_start);
+    const x_iter_end = Math.ceil(effective_pulse_start + window_W);
 
     // --- Iterate over the conceptual window range ---
     for (let x_iter = x_iter_start; x_iter <= x_iter_end; x_iter++) {
         // --- Calculate the actual canvas X coordinate with wrap-around ---
-        // The modulo operator handles the wrap-around correctly for both positive and negative x_iter
-        // Adding 'width' before the first modulo ensures the result is non-negative
         const x_abs = ((x_iter % width) + width) % width;
-        const x_abs_floor = Math.floor(x_abs); // Use floor for consistency if needed, though drawing uses center
 
-        // Calculate this pixel's position relative to the *fixed shape's center*
-        // IMPORTANT: Use x_iter (the conceptual position) not x_abs (the wrapped position)
-        //            to calculate the position relative to the shape center.
-        const x_rel_shape = x_iter - SHAPE_CENTER_X;
+        // --- Calculate this pixel's position relative to the *fixed shape's center* ---
+        // --- Use the *wrapped* x_abs for periodicity ---
+        const x_rel_shape = x_abs - SHAPE_CENTER_X;
 
         // Calculate absolute top and bottom y coordinates using the shape-relative helpers
-        // These lines now extend indefinitely based on the conceptual x_iter position
         const y_top_abs = fixed_shape_cy + getTopRelY(x_rel_shape);
         const y_bottom_abs = fixed_shape_cy + getBottomRelY(x_rel_shape);
 
@@ -379,16 +369,13 @@ export function draw({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
         const y_draw_top = Math.max(0, Math.min(height - 1, y_top_abs));
         const y_draw_bottom = Math.max(0, Math.min(height - 1, y_bottom_abs));
 
-        // Draw the vertical line segment if valid (top is above bottom after clamping)
-        // Draw it at the *wrapped* canvas coordinate x_abs
+        // Draw the vertical line segment if valid
         if (y_draw_top >= y_draw_bottom) {
-             elementsCtx.beginPath();
-             // Add 0.5 to the *wrapped* x_abs for sharp 1px vertical lines
-             elementsCtx.moveTo(x_abs + 0.5, y_draw_bottom);
-             elementsCtx.lineTo(x_abs + 0.5, y_draw_top);
-             elementsCtx.stroke();
+            elementsCtx.beginPath();
+            elementsCtx.moveTo(x_abs + 0.5, y_draw_bottom);
+            elementsCtx.lineTo(x_abs + 0.5, y_draw_top);
+            elementsCtx.stroke();
         }
-        // Removed the check against shape_hw - we want the lines to extend
     }
     // --- End REVISED Hexagon Drawing Logic ---
 
@@ -512,7 +499,11 @@ function resetParametersToSnapshot() {
     SHAPE_NOISE_AMPLITUDE = snapshotValues.shapeAmplitude;
     NOISE_AMPLITUDE = snapshotValues.gradientAmplitude;
 
+    // --- ADDED: Reset hexagon phase ---
+    hexagonPhase = 0.0;
+
     console.log('Parameters reset to snapshot:', snapshotValues);
+    console.log('Hexagon phase reset.'); // Optional log
 
     // --- ADDED: Update sliders and value spans to match snapshot ---
     const gridScaleSlider = document.getElementById('grid-scale-slider') as HTMLInputElement | null;
@@ -662,10 +653,12 @@ export function start(contexts: CanvasContexts) {
     const timePulseFreqValueSpan = document.getElementById('time-pulse-freq-value');
     const timePulseAmountSlider = document.getElementById('time-pulse-amount-slider') as HTMLInputElement;
     const timePulseAmountValueSpan = document.getElementById('time-pulse-amount-value');
-    const hexagonCenterSlider = document.getElementById('hexagon-center-slider') as HTMLInputElement;
-    const hexagonCenterValueSpan = document.getElementById('hexagon-center-value');
+    const hexagonPulseStartSlider = document.getElementById('hexagon-pulse-start-slider') as HTMLInputElement; // Renamed variable
+    const hexagonPulseStartValueSpan = document.getElementById('hexagon-pulse-start-value'); // Renamed variable
     const hexagonWidthSlider = document.getElementById('hexagon-width-slider') as HTMLInputElement;
     const hexagonWidthValueSpan = document.getElementById('hexagon-width-value');
+    const hexagonPulseOffsetSlider = document.getElementById('hexagon-pulse-offset-slider') as HTMLInputElement; // New variable
+    const hexagonPulseOffsetValueSpan = document.getElementById('hexagon-pulse-offset-value'); // New variable
 
 
     // --- Toggle Controls Button Setup ---
@@ -863,32 +856,43 @@ export function start(contexts: CanvasContexts) {
     // --- END SLIDER SETUP ---
 
     // --- Listeners for Hexagon (Window) sliders ---
-    if (hexagonCenterSlider && hexagonCenterValueSpan) {
-        hexagonCenterSlider.max = contexts.canvasWebGL.width.toString();
-        if (HEXAGON_CENTER_X !== null) { // Should be initialized now
-             hexagonCenterSlider.value = HEXAGON_CENTER_X.toString();
-             hexagonCenterValueSpan.textContent = HEXAGON_CENTER_X.toFixed(0);
-        } else { // Defensive fallback
-            console.error("HEXAGON_CENTER_X (window center) is unexpectedly null after setup call!");
-            const defaultCenter = contexts.canvasWebGL.width / 2;
-            hexagonCenterSlider.value = defaultCenter.toString();
-            hexagonCenterValueSpan.textContent = defaultCenter.toFixed(0);
+    if (hexagonPulseStartSlider && hexagonPulseStartValueSpan) { // Use renamed variables
+        hexagonPulseStartSlider.max = contexts.canvasWebGL.width.toString();
+        if (HEXAGON_PULSE_START !== null) {
+             hexagonPulseStartSlider.value = HEXAGON_PULSE_START.toString();
+             hexagonPulseStartValueSpan.textContent = HEXAGON_PULSE_START.toFixed(0);
+        } else {
+            console.error("HEXAGON_PULSE_START is unexpectedly null after setup call!");
+            const defaultStart = contexts.canvasWebGL.width / 2;
+            hexagonPulseStartSlider.value = defaultStart.toString();
+            hexagonPulseStartValueSpan.textContent = defaultStart.toFixed(0);
         }
 
-        hexagonCenterSlider.addEventListener('input', (e) => {
+        hexagonPulseStartSlider.addEventListener('input', (e) => {
             const sliderValue = parseFloat((e.target as HTMLInputElement).value);
-            HEXAGON_CENTER_X = sliderValue; // Update the window center variable
-            hexagonCenterValueSpan.textContent = HEXAGON_CENTER_X.toFixed(0);
+            HEXAGON_PULSE_START = sliderValue; // Update the pulse start variable
+            hexagonPulseStartValueSpan.textContent = HEXAGON_PULSE_START.toFixed(0);
         });
     }
 
     if (hexagonWidthSlider && hexagonWidthValueSpan) {
-        hexagonWidthSlider.value = HEXAGON_WIDTH.toString(); // Initial window width
+        hexagonWidthSlider.value = HEXAGON_WIDTH.toString();
         hexagonWidthValueSpan.textContent = HEXAGON_WIDTH.toFixed(0);
         hexagonWidthSlider.addEventListener('input', (e) => {
             const sliderValue = parseFloat((e.target as HTMLInputElement).value);
             HEXAGON_WIDTH = sliderValue; // Update the window width variable
             hexagonWidthValueSpan.textContent = HEXAGON_WIDTH.toFixed(0);
+        });
+    }
+
+    // Listener for Pulse Offset (NEW)
+    if (hexagonPulseOffsetSlider && hexagonPulseOffsetValueSpan) {
+        hexagonPulseOffsetSlider.value = HEXAGON_PULSE_OFFSET.toString();
+        hexagonPulseOffsetValueSpan.textContent = HEXAGON_PULSE_OFFSET.toFixed(3); // Show more precision
+        hexagonPulseOffsetSlider.addEventListener('input', (e) => {
+            const sliderValue = parseFloat((e.target as HTMLInputElement).value);
+            HEXAGON_PULSE_OFFSET = sliderValue; // Update the offset variable
+            hexagonPulseOffsetValueSpan.textContent = HEXAGON_PULSE_OFFSET.toFixed(3);
         });
     }
     // --- END SLIDER LISTENERS ---
