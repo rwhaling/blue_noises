@@ -69,7 +69,7 @@ let GRID_AXIS_SCALE = [2.0, 1.0];
 let GRID_WAVE_SPEED = 0.6;      // EDIT: Added constant for sine wave speed
 
 // --- ADDED: Separate noise parameters for shape displacement ---
-let SHAPE_NOISE_AMPLITUDE = 4.04; // Initial value, same as original for now
+let SHAPE_NOISE_AMPLITUDE = 0.00; // Initial value, same as original for now
 let SHAPE_NOISE_SCALE = 1.51;     // Initial value, same as original for now
 
 // --- ADDED: High-frequency noise parameters for shape displacement ---
@@ -187,10 +187,11 @@ function padFrameNumber(num: number): string {
 let SHAPE_CENTER_X: number | null = null;
 
 // --- UPDATED: Hexagon Pulse/Window Parameters ---
-let HEXAGON_PULSE_START: number | null = null; // Renamed from HEXAGON_CENTER_X
+let HEXAGON_PULSE_START: number | null = null; // Base start position
 let HEXAGON_WIDTH = 150 * Math.sqrt(3);
-let HEXAGON_PULSE_OFFSET = 0.0; // NEW: Offset from -1 to 1
-let hexagonPhase = 0.0; // NEW: Accumulated phase/offset
+let HEXAGON_PULSE_OFFSET = 0.0; // Increment rate
+let hexagonPhase = 0.0; // Accumulated phase/offset
+let HEXAGON_HEIGHT = 225; // NEW: Vertical distance from center to apex (default based on R=150 * 1.5)
 
 export function setup({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
     // REMOVE old initWebGL call
@@ -307,75 +308,98 @@ export function draw({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
     // --- Pass 2: Draw 2D elements to elementsTexture ---
     elementsCtx.clearRect(0, 0, width, height);
 
-    // --- REVISED Hexagon Drawing Logic for Periodic Wrap-Around ---
+    // --- REVISED Hexagon Drawing Logic with Correct Clamping & Phase ---
     if (SHAPE_CENTER_X === null) { SHAPE_CENTER_X = width / 2; }
     if (HEXAGON_PULSE_START === null) { HEXAGON_PULSE_START = width / 2; }
 
-    // --- Define the fixed shape proportions ---
-    const R_SHAPE = 150;
-    const shape_hw = R_SHAPE * Math.sqrt(3) / 2;
-    const shape_vh = R_SHAPE;
-    const shape_yo = R_SHAPE * 1.5;
-    const m_tl = shape_hw !== 0 ? (shape_yo - shape_vh) / shape_hw : 0;
-    const m_tr = shape_hw !== 0 ? (shape_vh - shape_yo) / shape_hw : 0;
-    const m_bl = shape_hw !== 0 ? (-shape_yo + shape_vh) / shape_hw : 0;
-    const m_br = shape_hw !== 0 ? (-shape_vh + shape_yo) / shape_hw : 0;
+    // --- Define the fixed shape base geometry AND original proportions ---
+    const R_BASE = 150;
+    const shape_hw = R_BASE * Math.sqrt(3) / 2;
+    const shape_vh = R_BASE;
+    const original_shape_yo = R_BASE * 1.5;
+
+    // Calculate slopes based *only* on the original, full-height proportions
+    const m_tl_orig = shape_hw !== 0 ? (original_shape_yo - shape_vh) / shape_hw : 0;
+    const m_tr_orig = shape_hw !== 0 ? (shape_vh - original_shape_yo) / shape_hw : 0;
+    const m_bl_orig = shape_hw !== 0 ? (-original_shape_yo + shape_vh) / shape_hw : 0;
+    const m_br_orig = shape_hw !== 0 ? (-shape_vh + original_shape_yo) / shape_hw : 0;
     // --- End Shape Definition ---
 
-    // --- Get window parameters from sliders and internal phase ---
+    // --- Get current parameters ---
+    const current_shape_yo = HEXAGON_HEIGHT; // Current max height offset from slider
     const pulse_start_base = HEXAGON_PULSE_START;
     const window_W = HEXAGON_WIDTH;
     const effective_pulse_start = pulse_start_base + hexagonPhase;
     const fixed_shape_cy = height / 2;
 
-    // --- Helper functions remain the same ---
+    // --- Helper functions (remain the same) ---
     function getTopRelY(x_rel_shape: number): number {
-        if (x_rel_shape <= 0) { // Left side
-            return m_tl * x_rel_shape + shape_yo;
-        } else { // Right side
-            return m_tr * x_rel_shape + shape_yo;
-        }
+        if (x_rel_shape <= 0) { return m_tl_orig * x_rel_shape + current_shape_yo; }
+        else { return m_tr_orig * x_rel_shape + current_shape_yo; }
     }
     function getBottomRelY(x_rel_shape: number): number {
-        if (x_rel_shape <= 0) { // Left side
-            return m_bl * x_rel_shape - shape_yo;
-        } else { // Right side
-            return m_br * x_rel_shape - shape_yo;
-        }
+        if (x_rel_shape <= 0) { return m_bl_orig * x_rel_shape - current_shape_yo; }
+        else { return m_br_orig * x_rel_shape - current_shape_yo; }
     }
     // --- End Helper Functions ---
 
     elementsCtx.strokeStyle = 'white';
     elementsCtx.lineWidth = 1;
 
-    // --- Determine the *conceptual* X range based on effective start and width ---
+    // --- Determine the *conceptual* X range ---
     const x_iter_start = Math.floor(effective_pulse_start);
     const x_iter_end = Math.ceil(effective_pulse_start + window_W);
 
     // --- Iterate over the conceptual window range ---
     for (let x_iter = x_iter_start; x_iter <= x_iter_end; x_iter++) {
-        // --- Calculate the actual canvas X coordinate with wrap-around ---
         const x_abs = ((x_iter % width) + width) % width;
-
-        // --- Calculate this pixel's position relative to the *fixed shape's center* ---
-        // --- Use the *wrapped* x_abs for periodicity ---
         const x_rel_shape = x_abs - SHAPE_CENTER_X;
 
-        // Calculate absolute top and bottom y coordinates using the shape-relative helpers
-        const y_top_abs = fixed_shape_cy + getTopRelY(x_rel_shape);
-        const y_bottom_abs = fixed_shape_cy + getBottomRelY(x_rel_shape);
+        // 1. Calculate initial desired top/bottom Y based on slopes and current height
+        let y_top_initial = fixed_shape_cy + getTopRelY(x_rel_shape);
+        let y_bottom_initial = fixed_shape_cy + getBottomRelY(x_rel_shape);
 
-        // Clamp final Y coordinates to canvas bounds
-        const y_draw_top = Math.max(0, Math.min(height - 1, y_top_abs));
-        const y_draw_bottom = Math.max(0, Math.min(height - 1, y_bottom_abs));
+        let y_top_height_clamped: number;
+        let y_bottom_height_clamped: number;
 
-        // Draw the vertical line segment if valid
+        // 2. Check for Inversion due to low height
+        if (y_top_initial < y_bottom_initial) {
+            // Inversion occurred. Collapse this segment to the center line.
+            y_top_height_clamped = fixed_shape_cy;
+            y_bottom_height_clamped = fixed_shape_cy;
+        } else {
+            // 3. No inversion: Apply normal height range clamping (squashing)
+            const max_y = fixed_shape_cy + current_shape_yo;
+            const min_y = fixed_shape_cy - current_shape_yo;
+            y_top_height_clamped = Math.max(min_y, Math.min(max_y, y_top_initial));
+            y_bottom_height_clamped = Math.max(min_y, Math.min(max_y, y_bottom_initial));
+            // Minor safety check: ensure clamping didn't accidentally invert (shouldn't with this logic)
+            y_bottom_height_clamped = Math.min(y_top_height_clamped, y_bottom_height_clamped);
+        }
+
+        // 4. Clamp final Y coordinates to canvas bounds
+        let y_draw_top = Math.max(0, Math.min(height - 1, y_top_height_clamped));
+        let y_draw_bottom = Math.max(0, Math.min(height - 1, y_bottom_height_clamped));
+
+        // 5. Ensure minimum 1px height (using robust logic from previous step)
+        // if (y_draw_top === y_draw_bottom) {
+        //     // Prefer extending upwards if not already at the top edge
+        //     if (y_draw_top < height - 1) {
+        //         y_draw_top = y_draw_bottom; // Using 1px adjustment
+        //     }
+        //     // Otherwise (if already at top edge), try extending downwards
+        //     else if (y_draw_bottom > 0) {
+        //         y_draw_bottom = y_draw_top; // Using 1px adjustment
+        //     }
+        // }
+
+        // 6. Draw the vertical line segment if it has valid height
         if (y_draw_top >= y_draw_bottom) {
             elementsCtx.beginPath();
             elementsCtx.moveTo(x_abs + 0.5, y_draw_bottom);
             elementsCtx.lineTo(x_abs + 0.5, y_draw_top);
             elementsCtx.stroke();
-        }
+        } 
     }
     // --- End REVISED Hexagon Drawing Logic ---
 
@@ -531,6 +555,13 @@ function resetParametersToSnapshot() {
         noiseAmpSlider.value = (NOISE_AMPLITUDE * 25.0).toString();
         noiseAmpValueSpan.textContent = NOISE_AMPLITUDE.toFixed(2);
     }
+
+    const hexagonPulseOffsetSlider = document.getElementById('hexagon-pulse-offset-slider') as HTMLInputElement | null;
+    const hexagonPulseOffsetValueSpan = document.getElementById('hexagon-pulse-offset-value');
+    if (hexagonPulseOffsetSlider && hexagonPulseOffsetValueSpan) {
+        hexagonPulseOffsetSlider.value = '0';
+        hexagonPulseOffsetValueSpan.textContent = '0.000';
+    }
     // --- End Slider Updates ---
 }
 // --- End Reset Parameters function ---
@@ -653,12 +684,14 @@ export function start(contexts: CanvasContexts) {
     const timePulseFreqValueSpan = document.getElementById('time-pulse-freq-value');
     const timePulseAmountSlider = document.getElementById('time-pulse-amount-slider') as HTMLInputElement;
     const timePulseAmountValueSpan = document.getElementById('time-pulse-amount-value');
-    const hexagonPulseStartSlider = document.getElementById('hexagon-pulse-start-slider') as HTMLInputElement; // Renamed variable
-    const hexagonPulseStartValueSpan = document.getElementById('hexagon-pulse-start-value'); // Renamed variable
+    const hexagonPulseStartSlider = document.getElementById('hexagon-pulse-start-slider') as HTMLInputElement;
+    const hexagonPulseStartValueSpan = document.getElementById('hexagon-pulse-start-value');
     const hexagonWidthSlider = document.getElementById('hexagon-width-slider') as HTMLInputElement;
     const hexagonWidthValueSpan = document.getElementById('hexagon-width-value');
-    const hexagonPulseOffsetSlider = document.getElementById('hexagon-pulse-offset-slider') as HTMLInputElement; // New variable
-    const hexagonPulseOffsetValueSpan = document.getElementById('hexagon-pulse-offset-value'); // New variable
+    const hexagonPulseOffsetSlider = document.getElementById('hexagon-pulse-offset-slider') as HTMLInputElement;
+    const hexagonPulseOffsetValueSpan = document.getElementById('hexagon-pulse-offset-value');
+    const hexagonHeightSlider = document.getElementById('hexagon-height-slider') as HTMLInputElement;
+    const hexagonHeightValueSpan = document.getElementById('hexagon-height-value');
 
 
     // --- Toggle Controls Button Setup ---
@@ -856,7 +889,7 @@ export function start(contexts: CanvasContexts) {
     // --- END SLIDER SETUP ---
 
     // --- Listeners for Hexagon (Window) sliders ---
-    if (hexagonPulseStartSlider && hexagonPulseStartValueSpan) { // Use renamed variables
+    if (hexagonPulseStartSlider && hexagonPulseStartValueSpan) {
         hexagonPulseStartSlider.max = contexts.canvasWebGL.width.toString();
         if (HEXAGON_PULSE_START !== null) {
              hexagonPulseStartSlider.value = HEXAGON_PULSE_START.toString();
@@ -885,7 +918,7 @@ export function start(contexts: CanvasContexts) {
         });
     }
 
-    // Listener for Pulse Offset (NEW)
+    // Pulse Offset (Increment)
     if (hexagonPulseOffsetSlider && hexagonPulseOffsetValueSpan) {
         hexagonPulseOffsetSlider.value = HEXAGON_PULSE_OFFSET.toString();
         hexagonPulseOffsetValueSpan.textContent = HEXAGON_PULSE_OFFSET.toFixed(3); // Show more precision
@@ -893,6 +926,17 @@ export function start(contexts: CanvasContexts) {
             const sliderValue = parseFloat((e.target as HTMLInputElement).value);
             HEXAGON_PULSE_OFFSET = sliderValue; // Update the offset variable
             hexagonPulseOffsetValueSpan.textContent = HEXAGON_PULSE_OFFSET.toFixed(3);
+        });
+    }
+
+    // Height (NEW)
+    if (hexagonHeightSlider && hexagonHeightValueSpan) {
+        hexagonHeightSlider.value = HEXAGON_HEIGHT.toString();
+        hexagonHeightValueSpan.textContent = HEXAGON_HEIGHT.toFixed(0);
+        hexagonHeightSlider.addEventListener('input', (e) => {
+            const sliderValue = parseFloat((e.target as HTMLInputElement).value);
+            HEXAGON_HEIGHT = sliderValue; // Update the height variable
+            hexagonHeightValueSpan.textContent = HEXAGON_HEIGHT.toFixed(0);
         });
     }
     // --- END SLIDER LISTENERS ---
