@@ -85,6 +85,9 @@ let WAVE_TIMESCALE = 0.1;   // NEW: time scale for the wave
 let TIME_PULSE_FREQUENCY = 1; // Example frequency (cycles per second)
 let TIME_PULSE_AMOUNT = 0.1;    // Example amount (0 to 1 typical)
 
+// --- ADDED: Pulse Sync Frequency ---
+let PULSE_SYNC_FREQ = 1.0; // Retrigger frequency (1 = one cycle per width travelled)
+
 // Palette Colors
 let GRADIENT_COLOR_A = '#100F0F'; // Base Color AED4596
 let GRADIENT_COLOR_B = '#3734DA'; // Base Color swap to A145ED
@@ -189,8 +192,8 @@ let SHAPE_CENTER_X: number | null = null;
 // --- UPDATED: Hexagon Pulse/Window Parameters ---
 let HEXAGON_PULSE_START: number | null = null; // Base start position
 let HEXAGON_WIDTH = 150 * Math.sqrt(3);
-let HEXAGON_PULSE_OFFSET = 0.0; // Increment rate
-let hexagonPhase = 0.0; // Accumulated phase/offset
+let HEXAGON_PULSE_SPEED = 0.0; // RENAMED from OFFSET, represents pixels/sec speed
+let hexagonPhase = 0.0; // Accumulated phase/distance travelled
 let HEXAGON_HEIGHT = 225; // NEW: Vertical distance from center to apex (default based on R=150 * 1.5)
 
 export function setup({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
@@ -253,8 +256,9 @@ export function draw({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
     // console.log(`draw.ts - Frame: ${frameCount}, CurrentTime: ${currentTime.toFixed(3)}`); // Optional DEBUG
     // --- End Time Calculation ---
 
-    // --- Increment Hexagon Phase ---
-    hexagonPhase += HEXAGON_PULSE_OFFSET; // Update phase based on offset slider value
+    // --- Update Hexagon Phase (based on speed and time increment) ---
+    hexagonPhase += HEXAGON_PULSE_SPEED * timeIncrement;
+    // --- End Phase Update ---
 
     // --- Handle Simple Animation ---
     if (isAnimating) {
@@ -308,7 +312,7 @@ export function draw({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
     // --- Pass 2: Draw 2D elements to elementsTexture ---
     elementsCtx.clearRect(0, 0, width, height);
 
-    // --- REVISED Hexagon Drawing Logic with Correct Clamping & Phase ---
+    // --- REVISED Hexagon Drawing Logic with Implicit Multi-Window Sync ---
     if (SHAPE_CENTER_X === null) { SHAPE_CENTER_X = width / 2; }
     if (HEXAGON_PULSE_START === null) { HEXAGON_PULSE_START = width / 2; }
 
@@ -327,10 +331,15 @@ export function draw({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
 
     // --- Get current parameters ---
     const current_shape_yo = HEXAGON_HEIGHT; // Current max height offset from slider
-    const pulse_start_base = HEXAGON_PULSE_START;
-    const window_W = HEXAGON_WIDTH;
-    const effective_pulse_start = pulse_start_base + hexagonPhase;
-    const fixed_shape_cy = height / 2;
+    const pulse_start_base = HEXAGON_PULSE_START; // Base starting X offset for the pulse window
+    const window_W = HEXAGON_WIDTH; // Width of the pulse window
+    const fixed_shape_cy = height / 2; // Vertical center of the shape
+
+    // --- Sync Frequency Calculation ---
+    // Determine the spatial length of one sync cycle. Prevent division by zero or negative freq.
+    const sync_cycle_length_pixels = width / Math.max(1e-6, PULSE_SYNC_FREQ); // Use small epsilon instead of 1 to allow frequencies < 1 if needed later, ensure > 0.
+    // --- End Sync Calculation ---
+
 
     // --- Helper functions (remain the same) ---
     function getTopRelY(x_rel_shape: number): number {
@@ -346,60 +355,68 @@ export function draw({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
     elementsCtx.strokeStyle = 'white';
     elementsCtx.lineWidth = 1;
 
-    // --- Determine the *conceptual* X range ---
-    const x_iter_start = Math.floor(effective_pulse_start);
-    const x_iter_end = Math.ceil(effective_pulse_start + window_W);
+    // Calculate the nominal start position of the "zeroth" conceptual window instance
+    // This position moves continuously with hexagonPhase
+    const nominal_zeroth_window_start = pulse_start_base + hexagonPhase;
 
-    // --- Iterate over the conceptual window range ---
-    for (let x_iter = x_iter_start; x_iter <= x_iter_end; x_iter++) {
-        const x_abs = ((x_iter % width) + width) % width;
-        const x_rel_shape = x_abs - SHAPE_CENTER_X;
+    // --- Iterate over screen X coordinates ---
+    for (let x_abs = 0; x_abs < width; x_abs++) {
 
-        // 1. Calculate initial desired top/bottom Y based on slopes and current height
-        let y_top_initial = fixed_shape_cy + getTopRelY(x_rel_shape);
-        let y_bottom_initial = fixed_shape_cy + getBottomRelY(x_rel_shape);
+        // Calculate the position of x_abs relative to the nominal start of the zeroth window
+        const relative_position = x_abs - nominal_zeroth_window_start;
 
-        let y_top_height_clamped: number;
-        let y_bottom_height_clamped: number;
+        // Map this relative position into a single sync cycle using modulo arithmetic.
+        // This effectively tells us how far x_abs is from the start of the *nearest preceding*
+        // conceptual window instance boundary in the repeating pattern.
+        // Handle potential negative results from modulo correctly.
+        const position_in_cycle = ((relative_position % sync_cycle_length_pixels) + sync_cycle_length_pixels) % sync_cycle_length_pixels;
 
-        // 2. Check for Inversion due to low height
-        if (y_top_initial < y_bottom_initial) {
-            // Inversion occurred. Collapse this segment to the center line.
-            y_top_height_clamped = fixed_shape_cy;
-            y_bottom_height_clamped = fixed_shape_cy;
-        } else {
-            // 3. No inversion: Apply normal height range clamping (squashing)
-            const max_y = fixed_shape_cy + current_shape_yo;
-            const min_y = fixed_shape_cy - current_shape_yo;
-            y_top_height_clamped = Math.max(min_y, Math.min(max_y, y_top_initial));
-            y_bottom_height_clamped = Math.max(min_y, Math.min(max_y, y_bottom_initial));
-            // Minor safety check: ensure clamping didn't accidentally invert (shouldn't with this logic)
-            y_bottom_height_clamped = Math.min(y_top_height_clamped, y_bottom_height_clamped);
+        // Check if this position falls within the width of *a* window instance
+        // If it does, it means this x_abs is currently covered by one of the repeating, sliding windows.
+        if (position_in_cycle < window_W) {
+            // This x_abs is inside the visible part of *some* shape window instance for this frame
+
+            // Calculate x relative to the *fixed* shape center for geometry lookup
+            const x_rel_shape = x_abs - SHAPE_CENTER_X;
+
+            // --- Calculate and Clamp Y coordinates (This logic remains the same) ---
+            // 1. Calculate initial desired top/bottom Y based on slopes and current height
+            let y_top_initial = fixed_shape_cy + getTopRelY(x_rel_shape);
+            let y_bottom_initial = fixed_shape_cy + getBottomRelY(x_rel_shape);
+
+            let y_top_height_clamped: number;
+            let y_bottom_height_clamped: number;
+
+            // 2. Check for Inversion due to low height
+            if (y_top_initial < y_bottom_initial) {
+                // Inversion occurred. Collapse this segment to the center line.
+                y_top_height_clamped = fixed_shape_cy;
+                y_bottom_height_clamped = fixed_shape_cy;
+            } else {
+                // 3. No inversion: Apply normal height range clamping (squashing)
+                const max_y = fixed_shape_cy + current_shape_yo;
+                const min_y = fixed_shape_cy - current_shape_yo;
+                y_top_height_clamped = Math.max(min_y, Math.min(max_y, y_top_initial));
+                y_bottom_height_clamped = Math.max(min_y, Math.min(max_y, y_bottom_initial));
+                // Minor safety check: ensure clamping didn't accidentally invert
+                y_bottom_height_clamped = Math.min(y_top_height_clamped, y_bottom_height_clamped);
+            }
+
+            // 4. Clamp final Y coordinates to canvas bounds
+            let y_draw_top = Math.max(0, Math.min(height - 1, y_top_height_clamped));
+            let y_draw_bottom = Math.max(0, Math.min(height - 1, y_bottom_height_clamped));
+            // --- End Y Calculation ---
+
+
+            // 6. Draw the vertical line segment if it has valid height
+            if (y_draw_top >= y_draw_bottom) {
+                elementsCtx.beginPath();
+                elementsCtx.moveTo(x_abs + 0.5, y_draw_bottom);
+                elementsCtx.lineTo(x_abs + 0.5, y_draw_top);
+                elementsCtx.stroke();
+            }
         }
-
-        // 4. Clamp final Y coordinates to canvas bounds
-        let y_draw_top = Math.max(0, Math.min(height - 1, y_top_height_clamped));
-        let y_draw_bottom = Math.max(0, Math.min(height - 1, y_bottom_height_clamped));
-
-        // 5. Ensure minimum 1px height (using robust logic from previous step)
-        // if (y_draw_top === y_draw_bottom) {
-        //     // Prefer extending upwards if not already at the top edge
-        //     if (y_draw_top < height - 1) {
-        //         y_draw_top = y_draw_bottom; // Using 1px adjustment
-        //     }
-        //     // Otherwise (if already at top edge), try extending downwards
-        //     else if (y_draw_bottom > 0) {
-        //         y_draw_bottom = y_draw_top; // Using 1px adjustment
-        //     }
-        // }
-
-        // 6. Draw the vertical line segment if it has valid height
-        if (y_draw_top >= y_draw_bottom) {
-            elementsCtx.beginPath();
-            elementsCtx.moveTo(x_abs + 0.5, y_draw_bottom);
-            elementsCtx.lineTo(x_abs + 0.5, y_draw_top);
-            elementsCtx.stroke();
-        } 
+        // else: x_abs is not covered by any window instance in the current phase, do nothing
     }
     // --- End REVISED Hexagon Drawing Logic ---
 
@@ -524,7 +541,7 @@ function resetParametersToSnapshot() {
     NOISE_AMPLITUDE = snapshotValues.gradientAmplitude;
 
     // --- ADDED: Reset hexagon phase ---
-    hexagonPhase = 0.0;
+    hexagonPhase = 0.0; // Keep reset for accumulated distance
 
     console.log('Parameters reset to snapshot:', snapshotValues);
     console.log('Hexagon phase reset.'); // Optional log
@@ -556,11 +573,23 @@ function resetParametersToSnapshot() {
         noiseAmpValueSpan.textContent = NOISE_AMPLITUDE.toFixed(2);
     }
 
-    const hexagonPulseOffsetSlider = document.getElementById('hexagon-pulse-offset-slider') as HTMLInputElement | null;
-    const hexagonPulseOffsetValueSpan = document.getElementById('hexagon-pulse-offset-value');
-    if (hexagonPulseOffsetSlider && hexagonPulseOffsetValueSpan) {
-        hexagonPulseOffsetSlider.value = '0';
-        hexagonPulseOffsetValueSpan.textContent = '0.000';
+    const hexagonPulseSpeedSlider = document.getElementById('hexagon-pulse-speed-slider') as HTMLInputElement | null; // RENAMED ID
+    const hexagonPulseSpeedValueSpan = document.getElementById('hexagon-pulse-speed-value'); // RENAMED ID
+    if (hexagonPulseSpeedSlider && hexagonPulseSpeedValueSpan) {
+        const defaultSpeed = 0.0;
+        hexagonPulseSpeedSlider.value = defaultSpeed.toString(); // Reset speed to 0
+        HEXAGON_PULSE_SPEED = defaultSpeed; // Update variable too
+        hexagonPulseSpeedValueSpan.textContent = defaultSpeed.toFixed(3);
+    }
+
+    // --- ADDED: Reset PULSE_SYNC_FREQ slider ---
+    const pulseSyncFreqSlider = document.getElementById('pulse-sync-freq-slider') as HTMLInputElement | null;
+    const pulseSyncFreqValueSpan = document.getElementById('pulse-sync-freq-value');
+    if (pulseSyncFreqSlider && pulseSyncFreqValueSpan) {
+        const defaultFreq = 1.0;
+        pulseSyncFreqSlider.value = defaultFreq.toString(); // Set slider to default 1.0
+        PULSE_SYNC_FREQ = defaultFreq; // Update variable
+        pulseSyncFreqValueSpan.textContent = defaultFreq.toFixed(1);
     }
     // --- End Slider Updates ---
 }
@@ -688,10 +717,13 @@ export function start(contexts: CanvasContexts) {
     const hexagonPulseStartValueSpan = document.getElementById('hexagon-pulse-start-value');
     const hexagonWidthSlider = document.getElementById('hexagon-width-slider') as HTMLInputElement;
     const hexagonWidthValueSpan = document.getElementById('hexagon-width-value');
-    const hexagonPulseOffsetSlider = document.getElementById('hexagon-pulse-offset-slider') as HTMLInputElement;
-    const hexagonPulseOffsetValueSpan = document.getElementById('hexagon-pulse-offset-value');
+    const hexagonPulseSpeedSlider = document.getElementById('hexagon-pulse-speed-slider') as HTMLInputElement; // RENAMED ID
+    const hexagonPulseSpeedValueSpan = document.getElementById('hexagon-pulse-speed-value'); // RENAMED ID
     const hexagonHeightSlider = document.getElementById('hexagon-height-slider') as HTMLInputElement;
     const hexagonHeightValueSpan = document.getElementById('hexagon-height-value');
+    // --- ADDED: Pulse Sync Freq Slider ---
+    const pulseSyncFreqSlider = document.getElementById('pulse-sync-freq-slider') as HTMLInputElement;
+    const pulseSyncFreqValueSpan = document.getElementById('pulse-sync-freq-value');
 
 
     // --- Toggle Controls Button Setup ---
@@ -918,18 +950,22 @@ export function start(contexts: CanvasContexts) {
         });
     }
 
-    // Pulse Offset (Increment)
-    if (hexagonPulseOffsetSlider && hexagonPulseOffsetValueSpan) {
-        hexagonPulseOffsetSlider.value = HEXAGON_PULSE_OFFSET.toString();
-        hexagonPulseOffsetValueSpan.textContent = HEXAGON_PULSE_OFFSET.toFixed(3); // Show more precision
-        hexagonPulseOffsetSlider.addEventListener('input', (e) => {
+    // Pulse Speed (RENAMED from Offset)
+    if (hexagonPulseSpeedSlider && hexagonPulseSpeedValueSpan) {
+        // Define reasonable min/max for speed (pixels/sec or units/sec)
+        hexagonPulseSpeedSlider.min = "-2000"; // Example range
+        hexagonPulseSpeedSlider.max = "2000";
+        hexagonPulseSpeedSlider.step = "1"; // Adjust step as needed
+        hexagonPulseSpeedSlider.value = HEXAGON_PULSE_SPEED.toString();
+        hexagonPulseSpeedValueSpan.textContent = HEXAGON_PULSE_SPEED.toFixed(3); // Show precision
+        hexagonPulseSpeedSlider.addEventListener('input', (e) => {
             const sliderValue = parseFloat((e.target as HTMLInputElement).value);
-            HEXAGON_PULSE_OFFSET = sliderValue; // Update the offset variable
-            hexagonPulseOffsetValueSpan.textContent = HEXAGON_PULSE_OFFSET.toFixed(3);
+            HEXAGON_PULSE_SPEED = sliderValue; // Update the speed variable
+            hexagonPulseSpeedValueSpan.textContent = HEXAGON_PULSE_SPEED.toFixed(3);
         });
     }
 
-    // Height (NEW)
+    // Height (Existing)
     if (hexagonHeightSlider && hexagonHeightValueSpan) {
         hexagonHeightSlider.value = HEXAGON_HEIGHT.toString();
         hexagonHeightValueSpan.textContent = HEXAGON_HEIGHT.toFixed(0);
@@ -937,6 +973,20 @@ export function start(contexts: CanvasContexts) {
             const sliderValue = parseFloat((e.target as HTMLInputElement).value);
             HEXAGON_HEIGHT = sliderValue; // Update the height variable
             hexagonHeightValueSpan.textContent = HEXAGON_HEIGHT.toFixed(0);
+        });
+    }
+
+    // --- ADDED: Listener for Pulse Sync Freq slider ---
+    if (pulseSyncFreqSlider && pulseSyncFreqValueSpan) {
+        pulseSyncFreqSlider.min = "1";    // Frequency must be at least 1
+        pulseSyncFreqSlider.max = "50";   // Set max frequency
+        pulseSyncFreqSlider.step = "0.1"; // Allow fractional frequencies
+        pulseSyncFreqSlider.value = PULSE_SYNC_FREQ.toString();
+        pulseSyncFreqValueSpan.textContent = PULSE_SYNC_FREQ.toFixed(1);
+        pulseSyncFreqSlider.addEventListener('input', (e) => {
+            const sliderValue = parseFloat((e.target as HTMLInputElement).value);
+            PULSE_SYNC_FREQ = Math.max(1, sliderValue); // Ensure freq >= 1
+            pulseSyncFreqValueSpan.textContent = PULSE_SYNC_FREQ.toFixed(1);
         });
     }
     // --- END SLIDER LISTENERS ---
