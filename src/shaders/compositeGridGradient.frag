@@ -11,6 +11,7 @@ uniform float u_gridRotation;   // EDIT: Added rotation uniform (radians)
 uniform vec2 u_gridAxisScale;   // EDIT: Added axis scaling uniform (xScale, yScale)
 uniform float u_noiseAmplitude; // Get noise amplitude uniform
 uniform float u_gridWaveSpeed;    // EDIT: Added uniform for sine wave speed
+uniform float u_grainAmplitude;   // EDIT: Added uniform for grain amplitude
 
 const float PI = acos(-1.0); // Define PI if not already available
 const float INV_SQRT2 = 0.7071067811865475; // 1.0 / sqrt(2.0)
@@ -212,6 +213,19 @@ void main() {
     mappedNoise = clamp(mappedNoise, 0.0, 1.0);
     float mappedValue = mappedNoise; // Use offset noise for color mix if uncommented
     */
+
+    // --- Add Final High-Frequency Grain ---
+    // Use texture coordinates scaled by frequency for grain input
+    // EDIT: Renamed finalNoiseCoord to grainCoord, kept literal frequency
+    vec2 grainCoord = v_texCoord * 200.0;
+    // Calculate noise, approx [-1, 1]
+    // EDIT: Renamed finalNoise to grainValue, kept literal time scale multiplier
+    float grainValue = snoise(vec3(grainCoord, u_time * 2.0));
+    // Scale noise by gain and add to the mapped value
+    // EDIT: Using u_grainAmplitude uniform instead of literal
+    mappedValue += grainValue * u_grainAmplitude;
+    // Clamp again to ensure it's in [0, 1] range
+    mappedValue = clamp(mappedValue, 0.0, 1.0);
 
     // --- Color mix ---
     vec3 color = mix(u_colorA, u_colorB, mappedValue);

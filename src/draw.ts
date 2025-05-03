@@ -76,6 +76,9 @@ let SHAPE_NOISE_SCALE = 1.51;     // Initial value, same as original for now
 let HIGH_FREQ_SHAPE_NOISE_AMOUNT = 0.0; // Start with a smaller amount
 let HIGH_FREQ_SHAPE_NOISE_SCALE = 32.0; // Start with a higher scale
 
+// --- ADDED: Grain Amplitude ---
+let GRAIN_AMPLITUDE = 0.1; // Default grain amount
+
 // Keep gradient wave parameters
 let WAVE_AMPLITUDE = 1.2;
 let WAVE_XSCALE = 0.1;      // NEW: x scale for the wave
@@ -89,10 +92,10 @@ let TIME_PULSE_AMOUNT = 0.1;    // Example amount (0 to 1 typical)
 let PULSE_SYNC_FREQ = 1.0; // Retrigger frequency (1 = one cycle per width travelled)
 
 // Palette Colors
-let GRADIENT_COLOR_A = '#100F0F'; // Base Color AED4596
+let GRADIENT_COLOR_A = '#ED4596'; // Base Color AED4596
 let GRADIENT_COLOR_B = '#3734DA'; // Base Color swap to A145ED
 // --- Step 1: Add New Color Constants ---
-let PALETTE_COLOR_C = '#C73868'; // Color for opaque black elements - CHANGED to let
+let PALETTE_COLOR_C = '#542636'; // Color for opaque black elements - CHANGED to let
 let PALETTE_COLOR_D = '#F2585B'; // Color for opaque white elements (unused for now) - CHANGED to let
 
 let PALETTE_COLOR_E = '#C73868';
@@ -116,7 +119,18 @@ let PALETTE_COLOR_F = '#F2585B';
 // 261C39
 // 3734DA
 
-/* purple/black on teal/blue
+// very nice together
+// #33E6DA
+// #261C39
+
+/* 
+#100F0F
+#205EA6 // nice to use with 3734DA
+#3734DA // very very nice with C73868
+#261C39
+*/
+
+/* purple/black on teal/blue (not that good)
 #33E6DA
 #3734DA
 #ED4596
@@ -124,11 +138,40 @@ let PALETTE_COLOR_F = '#F2585B';
 */
 
 /* very nice red/orange on blue/magenta
-#ED4596
+#ED4596 // nice with 100F0F too at large grids
 #3734DA -- nice with 205EA6 too
-#C73868
+#542636
 #F2585B
 */
+
+/* very nice pink/teal on black/aqua
+#100F0F
+#205EA6
+#33E6DA
+#C73868 // very nice with 261C39 too
+*/
+
+/* very nice purple/magenta on black/indigo
+#100F0F
+#3734DA 
+#C73868
+#261C39
+*/
+
+/* very nice metallic teal on indigo/black
+#100F0F
+#3734DA
+#261C39
+#33E6DA
+*/
+
+/* heck yes
+#3734DA
+#C73868
+#33E6DA
+#261C39
+*/
+
 
 /*
 #100F0F
@@ -137,12 +180,7 @@ let PALETTE_COLOR_F = '#F2585B';
 #F2585B
 */
 
-/*
-#100F0F
-#205EA6 -- nice with 3734DA too
-#C73868
-#69A1CC
-*/
+
 
 /* dark mirror - nice to introduce a new color/particles
 #100F0F
@@ -150,6 +188,70 @@ let PALETTE_COLOR_F = '#F2585B';
 #205EA6
 #100F0F
 */
+
+/*
+#100F0F
+#261C39
+#33E6DA
+#205EA6
+*/
+
+/*
+#100F0F
+#3734DA
+#205EA6
+#33E6DA
+*/
+
+/*
+#100F0F
+#205EA6
+#205EA6
+#542636
+*/
+
+/*
+#100F0F
+#261C39
+#205EA6
+#542636
+*/
+
+/*
+#100F0F
+#205EA6
+#3734DA
+#C73868
+*/
+
+/*
+#100F0F
+#205EA6
+#3734DA
+#542636
+*/
+
+/*
+#100F0F
+#205EA6
+#3734DA
+#C73868
+*/
+
+/*
+#205EA6
+#261C39
+#3734DA // nice with 33E6DA too
+#C73868
+*/
+
+/*
+#100F0F
+#205EA6
+#3734DA
+#C73868
+*/
+
 
 
 // let GRADIENT_COLOR_A = '#3171B2'; // Base Color AED4596
@@ -305,6 +407,7 @@ export function draw({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
         gridRotation: GRID_ROTATION,
         gridAxisScale: GRID_AXIS_SCALE,
         gridWaveSpeed: GRID_WAVE_SPEED,
+        grainAmplitude: GRAIN_AMPLITUDE
     };
     renderer.renderGradientPass(gradientUniforms);
 
@@ -724,6 +827,9 @@ export function start(contexts: CanvasContexts) {
     // --- ADDED: Pulse Sync Freq Slider ---
     const pulseSyncFreqSlider = document.getElementById('pulse-sync-freq-slider') as HTMLInputElement;
     const pulseSyncFreqValueSpan = document.getElementById('pulse-sync-freq-value');
+    // EDIT: Add grain amplitude slider variables
+    const grainAmplitudeSlider = document.getElementById('grain-amplitude-slider') as HTMLInputElement;
+    const grainAmplitudeValueSpan = document.getElementById('grain-amplitude-value');
 
 
     // --- Toggle Controls Button Setup ---
@@ -987,6 +1093,18 @@ export function start(contexts: CanvasContexts) {
             const sliderValue = parseFloat((e.target as HTMLInputElement).value);
             PULSE_SYNC_FREQ = Math.max(1, sliderValue); // Ensure freq >= 1
             pulseSyncFreqValueSpan.textContent = PULSE_SYNC_FREQ.toFixed(1);
+        });
+    }
+
+    // EDIT: Add listener for Grain Amplitude slider
+    if (grainAmplitudeSlider && grainAmplitudeValueSpan) {
+        // Example scale: 0-50 maps to 0.0 - 0.5 grain amplitude
+        grainAmplitudeSlider.value = (GRAIN_AMPLITUDE * 100.0).toString(); // Set initial slider position
+        grainAmplitudeValueSpan.textContent = GRAIN_AMPLITUDE.toFixed(2);
+        grainAmplitudeSlider.addEventListener('input', (e) => {
+            const sliderValue = parseFloat((e.target as HTMLInputElement).value);
+            GRAIN_AMPLITUDE = sliderValue / 100.0; // Scale slider value to desired range
+            grainAmplitudeValueSpan.textContent = GRAIN_AMPLITUDE.toFixed(2);
         });
     }
     // --- END SLIDER LISTENERS ---

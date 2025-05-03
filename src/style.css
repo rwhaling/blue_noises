@@ -28,7 +28,8 @@ html, body {
   align-items: flex-start; /* Align tops */
   gap: 30px;             /* Space between canvas and sidebar */
   width: 100%;
-  max-width: 900px; /* Max width for canvas (600) + sidebar (200) + gap (30) + buffer */
+  /* Max width: 600 (canvas) + 214 (sidebar) + 30 (gap) + 70 (buffer) = 914 */
+  max-width: 914px;
 }
 
 #canvas-container {
@@ -91,16 +92,16 @@ html, body {
   /* top: 0; */             /* <<< REMOVE top */
   /* left: 630px; */         /* <<< REMOVE left */
   /* z-index: 3; */         /* <<< REMOVE z-index */
-  width: 200px;            /* Keep fixed width */
+  width: 214px;            /* Keep width */
   flex-shrink: 0;          /* Prevent sidebar from shrinking */
   height: fit-content;
-  padding: 15px;
+  padding: 10px;           /* REDUCED padding */
   background-color: rgba(40, 40, 40, 0.8);
   border-radius: 5px;
   overflow: hidden;        /* Keep for collapse effect */
   /* transition: left 0.3s ease, padding 0.3s ease-out; */ /* Change transition */
   transition: width 0.3s ease, min-width 0.3s ease, padding 0.3s ease, opacity 0.3s ease; /* New transitions */
-  min-width: 200px;        /* Ensure minimum width when shown */
+  min-width: 214px;        /* Keep width */
   opacity: 1;              /* Ensure visible by default */
   border: none;            /* Ensure no border adds size */
 }
@@ -136,6 +137,27 @@ html, body {
   opacity: 1;
 }
 
+/* NEW: Style for the columns container */
+#slider-columns {
+  display: flex;
+  gap: 8px; /* REDUCED Space between columns */
+  width: 100%; /* Take full width of parent */
+}
+
+/* UPDATED: Style for individual columns (replaces #slider-groups-wrapper styles) */
+.slider-column {
+  display: flex;
+  flex-direction: column;
+  gap: 15px; /* Reduced gap between controls within a column */
+  align-items: stretch;
+  overflow: hidden;
+  transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+  /* max-height: 1000px; */ /* Remove or increase if needed */
+  opacity: 1;
+  flex-basis: 0; /* Allow columns to grow equally */
+  flex-grow: 1;
+}
+
 /* Adjust collapsed state for static positioning */
 #slider-container.collapsed {
    width: 0;            /* Collapse width */
@@ -143,41 +165,56 @@ html, body {
    padding: 0;          /* Collapse padding */
    opacity: 0;          /* Fade out */
    border: none;
+   /* Hide column gap when collapsed */
+   /* No specific rule needed here as columns themselves will collapse */
 }
 
-#slider-container.collapsed #slider-groups-wrapper {
+/* UPDATED: Target .slider-column for collapse */
+#slider-container.collapsed .slider-column {
    max-height: 0;
    opacity: 0; /* Already fading with parent */
-   gap: 0;
+   gap: 0; /* Collapse gap within columns */
 }
 
 .slider-group {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch; /* Stretch items within the group */
+  /* display: flex; */           /* Remove flex properties */
+  /* flex-direction: column; */
+  /* align-items: stretch; */
+  display: grid;                 /* Use Grid Layout */
+  grid-template-columns: 1fr auto; /* Label takes space, value takes minimum */
+  grid-template-rows: auto auto;    /* Row for label/value, row for slider */
+  grid-template-areas:           /* Define grid areas */
+    "label value"
+    "slider slider";
+  row-gap: 4px;                  /* REDUCED Gap between label/value row and slider row */
+  column-gap: 5px;               /* REDUCED Gap between label and value */
+  align-items: center;           /* Vertically align items in the first row */
   color: #f0f0f0;
   font-size: 0.9em;
 }
 
 .slider-group label {
-  margin-bottom: 8px; /* More space below label */
+  /* margin-bottom: 8px; */     /* Remove margin (handled by row-gap) */
   text-align: left;
+  grid-area: label;              /* Assign to grid area */
 }
 
 .slider-group input[type="range"] {
   width: 100%; /* Make slider fill the width */
   cursor: pointer;
+  grid-area: slider;             /* Assign to grid area */
 }
 
 .slider-group span {
-  margin-top: 8px; /* More space above value */
+  /* margin-top: 8px; */        /* Remove margin (handled by row-gap) */
   font-family: monospace;
-  min-width: 40px;
+  min-width: 36px;             /* Keep reduced min-width */
   text-align: center;
   background-color: #333;
-  padding: 3px 6px; /* Slightly larger padding */
+  padding: 3px 4px; /* REDUCED horizontal padding */
   border-radius: 3px;
-  align-self: center; /* Center the value display */
+  /* align-self: center; */     /* Remove (Grid handles alignment) */
+  grid-area: value;              /* Assign to grid area */
 }
 
 /* --- ADDED: Styles for Color Input Groups --- */
@@ -190,13 +227,13 @@ html, body {
 }
 
 .color-input-group label {
-  margin-bottom: 8px; /* Space below label */
+  margin-bottom: 6px; /* REDUCED Space below label */
   text-align: left;
 }
 
 .color-input-group input[type="text"] {
   width: 100%; /* Make input fill the width */
-  padding: 5px 8px; /* Add some padding */
+  padding: 4px 5px; /* REDUCED padding */
   border: 1px solid #555; /* Basic border */
   background-color: #333; /* Dark background */
   color: #f0f0f0; /* Light text */
