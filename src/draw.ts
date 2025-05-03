@@ -154,11 +154,18 @@ let PALETTE_COLOR_F = '#F2585B';
 #C73868 // very nice with 261C39 too
 */
 
+/* very nice purple on teal
+#100F0F
+#205EA6
+#542636
+#C73868
+*/
+
 /* very nice purple/magenta on black/indigo
 #100F0F
 #3734DA 
+#542636
 #C73868
-#261C39
 */
 
 /* very nice metallic teal on indigo/black

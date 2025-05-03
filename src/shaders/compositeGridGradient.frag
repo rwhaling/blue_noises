@@ -216,14 +216,23 @@ void main() {
 
     // --- Add Final High-Frequency Grain ---
     // Use texture coordinates scaled by frequency for grain input
-    // EDIT: Renamed finalNoiseCoord to grainCoord, kept literal frequency
     vec2 grainCoord = v_texCoord * 200.0;
     // Calculate noise, approx [-1, 1]
-    // EDIT: Renamed finalNoise to grainValue, kept literal time scale multiplier
     float grainValue = snoise(vec3(grainCoord, u_time * 2.0));
     // Scale noise by gain and add to the mapped value
-    // EDIT: Using u_grainAmplitude uniform instead of literal
     mappedValue += grainValue * u_grainAmplitude;
+
+    // --- Add extra grain near edges ---
+    float edgeThreshold = 0.03;
+    // Check if the x or y coordinate is within the threshold of any edge
+    bool nearEdge = v_texCoord.x < edgeThreshold || v_texCoord.x > 1.0 - edgeThreshold ||
+                    v_texCoord.y < edgeThreshold || v_texCoord.y > 1.0 - edgeThreshold;
+
+    // If near an edge, add additional scaled grain
+    if (nearEdge) {
+        mappedValue += grainValue * 2.0;
+    }
+
     // Clamp again to ensure it's in [0, 1] range
     mappedValue = clamp(mappedValue, 0.0, 1.0);
 
