@@ -179,12 +179,7 @@ export class Renderer {
         gl.uniform1f(gl.getUniformLocation(this.gradientProgram, 'u_gridRotation'), uniforms.gridRotation);
         gl.uniform2fv(gl.getUniformLocation(this.gradientProgram, 'u_gridAxisScale'), uniforms.gridAxisScale);
         gl.uniform1f(gl.getUniformLocation(this.gradientProgram, 'u_gridWaveSpeed'), uniforms.gridWaveSpeed);
-        const grainAmpLocation = gl.getUniformLocation(this.gradientProgram, 'u_grainAmplitude');
-        if (grainAmpLocation !== null) {
-            gl.uniform1f(grainAmpLocation, uniforms.grainAmplitude);
-        } else {
-            console.error("Uniform 'u_grainAmplitude' not found in gradientProgram!");
-        }
+        gl.uniform1f(gl.getUniformLocation(this.gradientProgram, 'u_grainAmplitude'), uniforms.grainAmplitude);
 
         // Draw the quad
         gl.clearColor(0, 0, 0, 0); // Clear FBO
