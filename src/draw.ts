@@ -9,6 +9,9 @@
 // ADD Renderer import
 import { Renderer, GradientUniforms, BlurUniforms, CompositeUniforms } from './render'; // Adjust path if needed
 
+// ADD AudioAnalyzer import
+import { AudioAnalyzer } from './audio'; // Adjust path if needed
+
 let frameCount = 0;
 
 // REMOVE WebGL Globals
@@ -28,6 +31,9 @@ let frameCount = 0;
 // ADD Renderer instance variable
 let renderer: Renderer | null = null; // To hold the Renderer instance
 
+// ADD AudioAnalyzer instance variable
+let audioAnalyzer: AudioAnalyzer | null = null;
+
 // Keep 2D Canvas Globals
 let elementsCanvas: HTMLCanvasElement;
 let elementsCtx: CanvasRenderingContext2D;
@@ -43,13 +49,13 @@ let currentFrameNumber = 0;
 let dirHandle: FileSystemDirectoryHandle | null = null;
 const TOTAL_FRAMES = 5550; // Example value, adjust as needed
 
-// --- ADDED: Simple Animation State ---
-let isAnimating = false;
-let animationStartTime = 0;
-const ANIMATION_DURATION = 2000; // Duration in milliseconds (e.g., 2 seconds)
-let startValues = { gridScale: 0, shapeAmplitude: 0, gradientAmplitude: 0 };
-let endValues = { gridScale: 1.0, shapeAmplitude: 6.0, gradientAmplitude: 1.0 };
-// --- End Animation State ---
+// --- REMOVE Simple Animation State ---
+// let isAnimating = false;
+// let animationStartTime = 0;
+// const ANIMATION_DURATION = 2000;
+// let startValues = { gridScale: 0, shapeAmplitude: 0, gradientAmplitude: 0 };
+// let endValues = { gridScale: 1.0, shapeAmplitude: 6.0, gradientAmplitude: 1.0 };
+// --- End Remove Animation State ---
 
 
 // --- Step 2: Add Blur Parameters ---
@@ -69,7 +75,7 @@ let GRID_AXIS_SCALE = [2.0, 1.0];
 let GRID_WAVE_SPEED = 0.6;      // EDIT: Added constant for sine wave speed
 
 // --- ADDED: Separate noise parameters for shape displacement ---
-let SHAPE_NOISE_AMPLITUDE = 0.00; // Initial value, same as original for now
+let SHAPE_NOISE_AMPLITUDE = 0.00; // Controlled by slider
 let SHAPE_NOISE_SCALE = 1.51;     // Initial value, same as original for now
 
 // --- ADDED: High-frequency noise parameters for shape displacement ---
@@ -95,11 +101,11 @@ let PULSE_SYNC_FREQ = 1.0; // Retrigger frequency (1 = one cycle per width trave
 let HEXAGON_WIDTH = 150 * Math.sqrt(3); // NEW: Max geometric width of the drawn hex within the pulse window. Initialized same as pulse width.
 
 // Palette Colors
-let GRADIENT_COLOR_A = '#ED4596'; // Base Color AED4596
+let GRADIENT_COLOR_A = '#3D2D5B'; // Base Color AED4596
 let GRADIENT_COLOR_B = '#3734DA'; // Base Color swap to A145ED
 // --- Step 1: Add New Color Constants ---
-let PALETTE_COLOR_C = '#542636'; // Color for opaque black elements - CHANGED to let
-let PALETTE_COLOR_D = '#F2585B'; // Color for opaque white elements (unused for now) - CHANGED to let
+let PALETTE_COLOR_C = '#3734DA'; // Color for opaque black elements - CHANGED to let
+let PALETTE_COLOR_D = '#33E6DA'; // Color for opaque white elements (unused for now) - CHANGED to let
 
 let PALETTE_COLOR_E = '#C73868';
 let PALETTE_COLOR_F = '#F2585B';
@@ -126,6 +132,13 @@ let PALETTE_COLOR_F = '#F2585B';
 // #33E6DA
 // #261C39
 
+/* current favorite w music
+#3D2D5B (nice lighter purple)
+#100F0F
+#3734DA // very nice with C73868
+#33E6DA
+*/
+
 /* 
 #100F0F
 #205EA6 // nice to use with 3734DA
@@ -148,13 +161,23 @@ let PALETTE_COLOR_F = '#F2585B';
 */
 
 /* very nice red/orange on blue/magenta
+nice with music
 #ED4596 // nice with 100F0F too at large grids
 #3734DA -- nice with 205EA6 too
 #542636
 #F2585B
 */
 
+/* nice dull orange on teal
+nice with music
+#205EA6
+#100F0F
+#261C39
+#F2585B
+*/
+
 /* very nice pink/teal on black/aqua
+nice with music
 #100F0F
 #205EA6
 #33E6DA
@@ -280,15 +303,19 @@ let PALETTE_COLOR_F = '#F2585B';
 // const PALETTE_COLOR_C = '#261C39'; // Color for opaque black elements
 // const PALETTE_COLOR_D = '#AED4596'; // Color for opaque white elements (unused for now)
 
-// --- ADDED: Snapshot State ---
+// --- MODIFY: Snapshot State (remove animation values) ---
 let snapshotValues = {
     gridScale: GRID_SCALE, // Initialize with current defaults
-    shapeAmplitude: SHAPE_NOISE_AMPLITUDE,
+    shapeAmplitude: SHAPE_NOISE_AMPLITUDE, // Base amplitude from slider
     gradientAmplitude: NOISE_AMPLITUDE,
-    hexagonWidth: HEXAGON_WIDTH // ADDED to snapshot - NOW SAFE TO ACCESS
+    hexagonWidth: HEXAGON_WIDTH
 };
 // --- End Snapshot State ---
 
+
+// ADD Configuration for audio modulation
+// const MAX_SHAPE_AMPLITUDE_FROM_AUDIO = 4.0; // The max value SHAPE_NOISE_AMPLITUDE will reach at full audio input
+// const BASE_SHAPE_AMPLITUDE = 0.1;           // A small base amplitude when audio is silent
 
 // Keep padFrameNumber
 function padFrameNumber(num: number): string {
@@ -315,6 +342,12 @@ let HEXAGON_PULSE_WIDTH = 150 * Math.sqrt(3); // RENAMED from HEXAGON_WIDTH
 let HEXAGON_PULSE_SPEED = 0.0; // RENAMED from OFFSET, represents pixels/sec speed
 let hexagonPhase = 0.0; // Accumulated phase/distance travelled
 let HEXAGON_HEIGHT = 225; // NEW: Vertical distance from center to apex (default based on R=150 * 1.5)
+
+// ADD new variable for audio modulation factor (0-1 range typically)
+let SHAPE_AUDIO_MOD = 0.0; // Represents the intensity/factor of modulation from audio
+
+// ADD a scaling factor for the audio modulation - CHANGED to let
+let AUDIO_MOD_SCALE = 4.0; // Adjust this to control how much audio affects the amount
 
 export function setup({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
     // REMOVE old initWebGL call
@@ -363,6 +396,9 @@ export function draw({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
          throw new Error('Renderer or elements canvas not initialized');
     }
 
+    // --- Check if Audio Analyzer is ready (optional safety) ---
+    const isAudioReady = audioAnalyzer?.checkInitialized() ?? false;
+
     const width = canvasWebGL.width;
     const height = canvasWebGL.height;
 
@@ -380,30 +416,22 @@ export function draw({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
     hexagonPhase += HEXAGON_PULSE_SPEED * timeIncrement;
     // --- End Phase Update ---
 
-    // --- Handle Simple Animation ---
-    if (isAnimating) {
-        const elapsedTime = Date.now() - animationStartTime;
-        const progress = Math.min(elapsedTime / ANIMATION_DURATION, 1.0); // Clamp progress to 0-1
-
-        // Linear interpolation (lerp)
-        const lerp = (start: number, end: number, t: number) => start * (1 - t) + end * t;
-
-        GRID_SCALE = lerp(startValues.gridScale, endValues.gridScale, progress);
-        SHAPE_NOISE_AMPLITUDE = lerp(startValues.shapeAmplitude, endValues.shapeAmplitude, progress);
-        NOISE_AMPLITUDE = lerp(startValues.gradientAmplitude, endValues.gradientAmplitude, progress);
-
-        // TODO: Update sliders visually if desired (more complex)
-
-        if (progress >= 1.0) {
-            isAnimating = false;
-            console.log('Animation complete.');
-            // Optionally ensure final values are exact
-            GRID_SCALE = endValues.gridScale;
-            SHAPE_NOISE_AMPLITUDE = endValues.shapeAmplitude;
-            NOISE_AMPLITUDE = endValues.gradientAmplitude;
-        }
+    // --- Update SHAPE_AUDIO_MOD based on audio level ---
+    if (isAudioReady && audioAnalyzer) {
+        // Get the raw smoothed audio level (0-1) and store it as the modulation factor
+        SHAPE_AUDIO_MOD = audioAnalyzer.getSmoothedLevel();
+    } else {
+        // If audio isn't ready, set modulation factor to neutral (0)
+        SHAPE_AUDIO_MOD = 0.0;
     }
-    // --- End Simple Animation Handling ---
+    // --- End Audio Modulation Factor Update ---
+
+    // --- Calculate Effective High-Frequency Shape Amount ---
+    // Combine base HF amount (from slider) with the scaled audio modulation
+    const EFF_HIGH_FREQ_SHAPE_NOISE_AMOUNT = HIGH_FREQ_SHAPE_NOISE_AMOUNT + SHAPE_AUDIO_MOD * AUDIO_MOD_SCALE;
+    // Optional: Clamp the effective amount if needed
+    // EFF_HIGH_FREQ_SHAPE_NOISE_AMOUNT = Math.max(0, EFF_HIGH_FREQ_SHAPE_NOISE_AMOUNT);
+    // --- End Effective HF Amount Calculation ---
 
 
     // --- Pass 1: Draw gradient to frameTexture (offscreen) ---
@@ -623,13 +651,15 @@ export function draw({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
         gridRotation: GRID_ROTATION,
         gridAxisScale: GRID_AXIS_SCALE,
         shapeNoiseScale: SHAPE_NOISE_SCALE,
-        shapeNoiseAmplitude: SHAPE_NOISE_AMPLITUDE,
+        shapeNoiseAmplitude: SHAPE_NOISE_AMPLITUDE, // EDIT: Use the base amplitude directly
         hfShapeNoiseScale: HIGH_FREQ_SHAPE_NOISE_SCALE,
-        hfShapeNoiseAmount: HIGH_FREQ_SHAPE_NOISE_AMOUNT,
+        hfShapeNoiseAmount: EFF_HIGH_FREQ_SHAPE_NOISE_AMOUNT, // EDIT: Use the calculated effective HF amount
         colorA: hexToRgb01Local(GRADIENT_COLOR_A), // Use local helper
         colorB: hexToRgb01Local(GRADIENT_COLOR_B), // Use local helper
         colorC: hexToRgb01Local(PALETTE_COLOR_C),  // Use local helper
         colorD: hexToRgb01Local(PALETTE_COLOR_D),  // Use local helper
+        // REMOVE shapeAudioMod uniform, as it's incorporated into EFF_HIGH_FREQ_SHAPE_NOISE_AMOUNT
+        // shapeAudioMod: SHAPE_AUDIO_MOD,
     };
     // Pass the texture returned by applyBlurPasses
     renderer.renderCompositePass(compositeUniforms, finalBlurredElementsTexture);
@@ -637,21 +667,9 @@ export function draw({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
     frameCount++;
 }
 
-// --- ADDED: Function to start the simple animation ---
-function animateParameters() {
-    if (isAnimating) return; // Don't restart if already animating
-
-    isAnimating = true;
-    animationStartTime = Date.now();
-
-    // Store starting values
-    startValues.gridScale = GRID_SCALE;
-    startValues.shapeAmplitude = SHAPE_NOISE_AMPLITUDE;
-    startValues.gradientAmplitude = NOISE_AMPLITUDE;
-
-    console.log('Starting animation...');
-}
-// --- End Animate Parameters function ---
+// --- REMOVE Animate Parameters function ---
+// function animateParameters() { ... }
+// --- End Remove Animate function ---
 
 // --- ADDED: Function to store current parameter values ---
 function takeSnapshot() {
@@ -659,30 +677,44 @@ function takeSnapshot() {
     snapshotValues.shapeAmplitude = SHAPE_NOISE_AMPLITUDE;
     snapshotValues.gradientAmplitude = NOISE_AMPLITUDE;
     snapshotValues.hexagonWidth = HEXAGON_WIDTH;
+    snapshotValues.audioModScale = AUDIO_MOD_SCALE; // ADDED
+    snapshotValues.hfShapeAmount = HIGH_FREQ_SHAPE_NOISE_AMOUNT; // ADDED: Snapshot base HF amount
     console.log('Snapshot taken:', snapshotValues);
 }
 // --- End Snapshot function ---
 
-// --- MODIFY: Rename and change logic for Reset function ---
-// Function to reset parameters based on the last snapshot
+// Modify Reset function
 function resetParametersToSnapshot() {
-    // Stop any ongoing animation
-    if (isAnimating) {
-        isAnimating = false;
-        console.log('Animation stopped by Reset.');
-    }
+    // --- REMOVE Stop animation ---
+    // if (isAnimating) { ... }
 
     // Restore values from snapshot
     GRID_SCALE = snapshotValues.gridScale;
-    SHAPE_NOISE_AMPLITUDE = snapshotValues.shapeAmplitude;
+    SHAPE_NOISE_AMPLITUDE = snapshotValues.shapeAmplitude; // Reset base amplitude
     NOISE_AMPLITUDE = snapshotValues.gradientAmplitude;
     HEXAGON_WIDTH = snapshotValues.hexagonWidth;
+    AUDIO_MOD_SCALE = snapshotValues.audioModScale; // ADDED: Restore audio mod scale
+    // ADDED: Restore base HF shape amount from snapshot, or use default if snapshot didn't have it
+    HIGH_FREQ_SHAPE_NOISE_AMOUNT = snapshotValues.hfShapeAmount ?? 0.0; // Default to 0.0 if missing
+
+    // Reset audio mod factor to neutral (0)
+    SHAPE_AUDIO_MOD = 0.0;
+    // REMOVED: Reset effective amplitude based on reset base amplitude and 0 audio mod
+    // EFF_SHAPE_NOISE_AMPLITUDE = SHAPE_NOISE_AMPLITUDE + SHAPE_AUDIO_MOD * AUDIO_MOD_SCALE;
+
+    // --- ADDED: Recalculate effective HF amount based on reset base HF and 0 audio mod ---
+    const EFF_HIGH_FREQ_SHAPE_NOISE_AMOUNT_RESET = HIGH_FREQ_SHAPE_NOISE_AMOUNT + SHAPE_AUDIO_MOD * AUDIO_MOD_SCALE;
 
     // --- ADDED: Reset hexagon phase ---
     hexagonPhase = 0.0; // Keep reset for accumulated distance
 
     console.log('Parameters reset to snapshot:', snapshotValues);
-    console.log('Hexagon phase reset.'); // Optional log
+    console.log('Hexagon phase reset.');
+    console.log(`Shape audio modulation factor reset to: ${SHAPE_AUDIO_MOD.toFixed(2)}`);
+    // console.log(`Effective shape noise amplitude reset to: ${EFF_SHAPE_NOISE_AMPLITUDE.toFixed(2)}`); // REMOVED log
+    console.log(`Base high-frequency shape amount reset to: ${HIGH_FREQ_SHAPE_NOISE_AMOUNT.toFixed(2)}`); // ADDED log for base
+    console.log(`Effective high-frequency shape amount reset to: ${EFF_HIGH_FREQ_SHAPE_NOISE_AMOUNT_RESET.toFixed(2)}`); // ADDED log for effective
+    console.log(`Audio Mod Scale reset to: ${AUDIO_MOD_SCALE.toFixed(2)}`); // ADDED log
 
     // --- ADDED: Update sliders and value spans to match snapshot ---
     const gridScaleSlider = document.getElementById('grid-scale-slider') as HTMLInputElement | null;
@@ -698,9 +730,10 @@ function resetParametersToSnapshot() {
     const shapeAmpSlider = document.getElementById('shape-amplitude-slider') as HTMLInputElement | null;
     const shapeAmpValueSpan = document.getElementById('shape-amplitude-value');
     if (shapeAmpSlider && shapeAmpValueSpan) {
-        // SHAPE_NOISE_AMPLITUDE = sliderValue / 25.0 => sliderValue = SHAPE_NOISE_AMPLITUDE * 25.0
-        shapeAmpSlider.value = (SHAPE_NOISE_AMPLITUDE * 25.0).toString();
+        // EDIT: Update the display based on the snapshot value (this slider now controls the base amplitude directly)
         shapeAmpValueSpan.textContent = SHAPE_NOISE_AMPLITUDE.toFixed(2);
+        shapeAmpSlider.value = (SHAPE_NOISE_AMPLITUDE * 25.0).toString(); // Reset slider position
+        // shapeAmpSlider.disabled = false; // Re-enable if it was disabled previously
     }
 
     const noiseAmpSlider = document.getElementById('noise-amplitude-slider') as HTMLInputElement | null;
@@ -711,8 +744,8 @@ function resetParametersToSnapshot() {
         noiseAmpValueSpan.textContent = NOISE_AMPLITUDE.toFixed(2);
     }
 
-    const hexagonPulseSpeedSlider = document.getElementById('hexagon-pulse-speed-slider') as HTMLInputElement | null; // RENAMED ID
-    const hexagonPulseSpeedValueSpan = document.getElementById('hexagon-pulse-speed-value'); // RENAMED ID
+    const hexagonPulseSpeedSlider = document.getElementById('hexagon-pulse-speed-slider') as HTMLInputElement | null;
+    const hexagonPulseSpeedValueSpan = document.getElementById('hexagon-pulse-speed-value');
     if (hexagonPulseSpeedSlider && hexagonPulseSpeedValueSpan) {
         const defaultSpeed = 0.0;
         hexagonPulseSpeedSlider.value = defaultSpeed.toString(); // Reset speed to 0
@@ -736,6 +769,28 @@ function resetParametersToSnapshot() {
     if (hexagonWidthSlider && hexagonWidthValueSpan) {
         hexagonWidthSlider.value = HEXAGON_WIDTH.toString(); // Set slider to snapshot value
         hexagonWidthValueSpan.textContent = HEXAGON_WIDTH.toFixed(0);
+    }
+
+    // --- ADDED: Update Audio Mod Scale slider ---
+    const audioModScaleSlider = document.getElementById('audio-mod-scale-slider') as HTMLInputElement | null;
+    const audioModScaleValueSpan = document.getElementById('audio-mod-scale-value');
+    if (audioModScaleSlider && audioModScaleValueSpan) {
+        // Reverse the quadratic scale: s = sqrt(AUDIO_MOD_SCALE / 64.0)
+        const initialS_audio = Math.sqrt(AUDIO_MOD_SCALE / 64.0);
+        audioModScaleSlider.value = (initialS_audio * 100.0).toString();
+        audioModScaleValueSpan.textContent = AUDIO_MOD_SCALE.toFixed(2);
+    }
+
+    // --- ADDED: Update High-Frequency Shape Amount slider ---
+    const hfShapeAmountSlider = document.getElementById('hf-shape-amount-slider') as HTMLInputElement | null;
+    const hfShapeAmountValueSpan = document.getElementById('hf-shape-amount-value');
+    if (hfShapeAmountSlider && hfShapeAmountValueSpan) {
+        // Update the display based on the snapshot value (this slider controls the base amount)
+        hfShapeAmountValueSpan.textContent = HIGH_FREQ_SHAPE_NOISE_AMOUNT.toFixed(2);
+        // Reset the slider position based on the base value
+        hfShapeAmountSlider.value = (HIGH_FREQ_SHAPE_NOISE_AMOUNT * 25.0).toString(); // Assuming same scale
+        // Optionally indicate that audio modulates this:
+        // hfShapeAmountValueSpan.textContent = `${HIGH_FREQ_SHAPE_NOISE_AMOUNT.toFixed(2)} (modulated)`;
     }
     // --- End Slider Updates ---
 }
@@ -789,6 +844,44 @@ export function start(contexts: CanvasContexts) {
     // {{ Moved setup call to the beginning }}
     setup(contexts);
 
+    // --- ADDED: Instantiate and Initialize Audio Analyzer ---
+    // Instantiate the analyzer
+    audioAnalyzer = new AudioAnalyzer();
+
+    // We need a user interaction to start the audio.
+    // Use a button click for this.
+    // RENAME the button ID in HTML from 'animate-button' to 'start-audio-button' for clarity
+    // Or keep using 'animate-button' if preferred.
+    const startAudioButton = document.getElementById('animate-button'); // Or 'start-audio-button'
+    let audioInitialized = false; // Track initialization state
+
+    if (startAudioButton) {
+        // Make this button ONLY initialize audio ONCE
+        startAudioButton.addEventListener('click', async () => {
+             if (audioAnalyzer && !audioInitialized) {
+                 console.log("Audio start button clicked, attempting to initialize audio...");
+                await audioAnalyzer.initializeAudio();
+                audioInitialized = audioAnalyzer.checkInitialized(); // Update state after attempt
+                 if (audioInitialized) {
+                     console.log("Audio initialized successfully via button click.");
+                     // Optionally change button text/state
+                     startAudioButton.textContent = "Audio Active";
+                     startAudioButton.disabled = true; // Disable after successful init
+                 } else {
+                      console.error("Failed to initialize audio via button click.");
+                      // Keep button enabled to allow retrying? Or display error?
+                 }
+             } else if (audioInitialized) {
+                  console.log("Audio already initialized.");
+             }
+             // --- REMOVE call to animateParameters() ---
+        }, { once: false }); // Use { once: true } if you *never* want it to retry after failure
+    } else {
+        console.warn("Could not find button to trigger audio initialization (expected #animate-button or #start-audio-button). Audio analysis will not start.");
+    }
+    // --- END Audio Analyzer Setup ---
+
+
     // Modify animation loop for conditional saving
     async function animate() {
         // console.log(`Animate frame: ${frameCount}`); // DEBUG: Verify loop execution
@@ -820,11 +913,6 @@ export function start(contexts: CanvasContexts) {
     // Add back render button listener
     const renderButton = document.querySelector('#render-button');
     renderButton?.addEventListener('click', startRendering);
-
-    // --- ADDED: Animate button listener ---
-    const animateButton = document.querySelector('#animate-button');
-    animateButton?.addEventListener('click', animateParameters);
-    // --- End Animate button listener ---
 
     // --- MODIFY: Update Reset button listener ---
     const resetButton = document.querySelector('#reset-button');
@@ -876,6 +964,9 @@ export function start(contexts: CanvasContexts) {
     // EDIT: Add grain amplitude slider variables
     const grainAmplitudeSlider = document.getElementById('grain-amplitude-slider') as HTMLInputElement;
     const grainAmplitudeValueSpan = document.getElementById('grain-amplitude-value');
+    // ADDED: Audio Mod Scale slider variables
+    const audioModScaleSlider = document.getElementById('audio-mod-scale-slider') as HTMLInputElement;
+    const audioModScaleValueSpan = document.getElementById('audio-mod-scale-value');
 
 
     // --- Toggle Controls Button Setup ---
@@ -1163,6 +1254,20 @@ export function start(contexts: CanvasContexts) {
             const sliderValue = parseFloat((e.target as HTMLInputElement).value);
             GRAIN_AMPLITUDE = sliderValue / 100.0; // Scale slider value to desired range
             grainAmplitudeValueSpan.textContent = GRAIN_AMPLITUDE.toFixed(2);
+        });
+    }
+
+    // --- ADDED: Listener for Audio Mod Scale slider ---
+    if (audioModScaleSlider && audioModScaleValueSpan) {
+        // Reverse quadratic scale for initial value: s = sqrt(4.0 / 64.0) = 0.25 => slider value 25
+        const initialS_audio = Math.sqrt(AUDIO_MOD_SCALE / 64.0);
+        audioModScaleSlider.value = (initialS_audio * 100.0).toString();
+        audioModScaleValueSpan.textContent = AUDIO_MOD_SCALE.toFixed(2);
+        audioModScaleSlider.addEventListener('input', (e) => {
+            const sliderValue = parseFloat((e.target as HTMLInputElement).value);
+            const s = sliderValue / 100.0;
+            AUDIO_MOD_SCALE = s * s * 64.0; // Apply quadratic scale (0-100 maps to 0-64)
+            audioModScaleValueSpan.textContent = AUDIO_MOD_SCALE.toFixed(2);
         });
     }
     // --- END SLIDER LISTENERS ---
