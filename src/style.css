@@ -26,15 +26,15 @@ html, body {
   display: flex;
   justify-content: center; /* Center canvas/sidebar group */
   align-items: flex-start; /* Align tops */
-  gap: 30px;             /* Space between canvas and sidebar */
   width: 100%;
-  /* Max width: 600 (canvas) + 214 (sidebar) + 30 (gap) + 70 (buffer) = 914 */
-  max-width: 914px;
+  /* Max width: 800 (canvas) + 40 (padding) + 70 (buffer) = 910 */
+  /* Or simply let canvas define width */
+  max-width: 800px; /* ADJUSTED max-width (or remove if canvas width dictates) */
 }
 
 #canvas-container {
-  width: 600px;
-  height: 600px;
+  width: 800px; /* UPDATED to match canvas */
+  height: 600px; /* UPDATED to match canvas */
   position: relative; /* Still needed for canvas layering */
   /* margin: 0 auto; */ /* Remove margin, flexbox handles centering */
   flex-shrink: 0; /* Prevent canvas from shrinking */
@@ -71,6 +71,7 @@ html, body {
   border: none;
   padding: 8px 12px; /* Adjusted padding slightly */
   font-size: 14px;   /* Adjusted font size slightly */
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
   border-radius: 4px;
   cursor: pointer;
   transition: background-color 0.2s ease;
@@ -88,22 +89,25 @@ html, body {
 }
 
 #slider-container {
-  /* position: absolute; */  /* <<< REMOVE absolute */
-  /* top: 0; */             /* <<< REMOVE top */
-  /* left: 630px; */         /* <<< REMOVE left */
-  /* z-index: 3; */         /* <<< REMOVE z-index */
-  width: 214px;            /* Keep width */
-  flex-shrink: 0;          /* Prevent sidebar from shrinking */
-  height: fit-content;
-  padding: 10px;           /* REDUCED padding */
+  position: fixed; /* <<< CHANGED to fixed */
+  top: 20px;       /* <<< ADDED positioning */
+  right: 20px;      /* <<< ADDED positioning */
+  z-index: 10;      /* <<< ADDED z-index to be above canvas */
+  width: 214px;
+  /* flex-shrink: 0; */ /* <<< REMOVED flex property */
+  /* height: fit-content; */ /* <<< REMOVED explicit height */
+  max-height: calc(100vh - 40px); /* <<< ADDED max-height calculation */
+  padding: 10px;
   background-color: rgba(40, 40, 40, 0.8);
   border-radius: 5px;
-  overflow: hidden;        /* Keep for collapse effect */
-  /* transition: left 0.3s ease, padding 0.3s ease-out; */ /* Change transition */
-  transition: width 0.3s ease, min-width 0.3s ease, padding 0.3s ease, opacity 0.3s ease; /* New transitions */
-  min-width: 214px;        /* Keep width */
-  opacity: 1;              /* Ensure visible by default */
-  border: none;            /* Ensure no border adds size */
+  /* overflow: hidden; */ /* <<< REMOVED overflow */
+  overflow-y: auto;       /* <<< ADDED overflow-y */
+  overflow-x: hidden;     /* <<< ADDED overflow-x */
+  transition: width 0.3s ease, min-width 0.3s ease, padding 0.3s ease, opacity 0.3s ease; /* Keep transitions */
+  min-width: 214px;
+  opacity: 1;
+  border: none;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
 }
 
 /* Style for the toggle button (now potentially outside slider-container) */
@@ -158,15 +162,15 @@ html, body {
   flex-grow: 1;
 }
 
-/* Adjust collapsed state for static positioning */
+/* Adjust collapsed state for fixed positioning */
 #slider-container.collapsed {
-   width: 0;            /* Collapse width */
-   min-width: 0;        /* Collapse min-width */
-   padding: 0;          /* Collapse padding */
-   opacity: 0;          /* Fade out */
+   width: 0;
+   min-width: 0;
+   padding: 0;
+   opacity: 0;
    border: none;
-   /* Hide column gap when collapsed */
-   /* No specific rule needed here as columns themselves will collapse */
+   /* Ensure content inside is hidden quickly */
+   overflow: hidden; /* Ensure overflow is hidden during collapse */
 }
 
 /* UPDATED: Target .slider-column for collapse */
@@ -190,24 +194,80 @@ html, body {
   column-gap: 5px;               /* REDUCED Gap between label and value */
   align-items: center;           /* Vertically align items in the first row */
   color: #f0f0f0;
-  font-size: 0.9em;
+  /* font-size: 0.9em; */ /* REMOVED - inherited now, but could be adjusted if needed */
 }
 
 .slider-group label {
   /* margin-bottom: 8px; */     /* Remove margin (handled by row-gap) */
   text-align: left;
   grid-area: label;              /* Assign to grid area */
+  font-size: 0.85em; /* Slightly reduce label size relative to parent */
 }
 
 .slider-group input[type="range"] {
   width: 100%; /* Make slider fill the width */
   cursor: pointer;
   grid-area: slider;             /* Assign to grid area */
+  /* --- ADDED Reset and Track/Thumb Styling --- */
+  -webkit-appearance: none; /* Override default look */
+  appearance: none;
+  height: 5px; /* Set a specific height for the track */
+  background: #333; /* Dark background for the track */
+  border-radius: 3px;
+  outline: none; /* Remove outline */
+  margin: 6px 0; /* Add some vertical margin */
 }
+
+/* Thumb (handle) styling for WebKit/Blink browsers */
+.slider-group input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; /* Override default look */
+  appearance: none;
+  width: 14px; /* Width of the thumb */
+  height: 14px; /* Height of the thumb */
+  background: #444; /* Lighter grey thumb */
+  border-radius: 50%; /* Make it circular */
+  cursor: pointer;
+  border: none; /* Remove default border */
+  margin-top: -4.5px; /* Vertically center thumb on track (approx height/2 - track_height/2) */
+}
+
+/* Thumb (handle) styling for Firefox */
+.slider-group input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: #444;
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+}
+
+/* Optional: Style the track for Firefox */
+.slider-group input[type="range"]::-moz-range-track {
+  width: 100%;
+  height: 5px;
+  background: #444;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+/* Optional: Hover/Active states for the thumb */
+.slider-group input[type="range"]::-webkit-slider-thumb:hover {
+  background: #ccc; /* Slightly lighter on hover */
+}
+.slider-group input[type="range"]::-moz-range-thumb:hover {
+  background: #ccc;
+}
+.slider-group input[type="range"]::-webkit-slider-thumb:active {
+  background: #eee; /* Even lighter when active */
+}
+.slider-group input[type="range"]::-moz-range-thumb:active {
+  background: #eee;
+}
+/* --- END ADDED Styles --- */
 
 .slider-group span {
   /* margin-top: 8px; */        /* Remove margin (handled by row-gap) */
-  font-family: monospace;
+  /* font-family: monospace; */ /* REMOVED monospace */
   min-width: 36px;             /* Keep reduced min-width */
   text-align: center;
   background-color: #333;
@@ -215,6 +275,7 @@ html, body {
   border-radius: 3px;
   /* align-self: center; */     /* Remove (Grid handles alignment) */
   grid-area: value;              /* Assign to grid area */
+  font-size: 0.85em; /* Match label size */
 }
 
 /* --- ADDED: Styles for Color Input Groups --- */
@@ -223,12 +284,13 @@ html, body {
   flex-direction: column;
   align-items: stretch; /* Stretch items within the group */
   color: #f0f0f0;
-  font-size: 0.9em;
+  /* font-size: 0.9em; */ /* REMOVED - inherited now */
 }
 
 .color-input-group label {
   margin-bottom: 6px; /* REDUCED Space below label */
   text-align: left;
+  font-size: 0.85em; /* Match slider label size */
 }
 
 .color-input-group input[type="text"] {
@@ -238,8 +300,9 @@ html, body {
   background-color: #333; /* Dark background */
   color: #f0f0f0; /* Light text */
   border-radius: 3px;
-  font-family: monospace; /* Monospace font often good for hex codes */
+  /* font-family: monospace; */ /* REMOVED monospace */
   box-sizing: border-box; /* Include padding/border in width */
+  font-size: 0.9em; /* Slightly larger for readability */
 }
 
 /* Optional: Style for invalid input */

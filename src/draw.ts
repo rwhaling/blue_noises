@@ -85,8 +85,8 @@ let WAVE_XSCALE = 0.1;      // NEW: x scale for the wave
 let WAVE_TIMESCALE = 0.1;   // NEW: time scale for the wave
 
 // --- ADDED: Time Pulse Parameters ---
-let TIME_PULSE_FREQUENCY = 1; // Example frequency (cycles per second)
-let TIME_PULSE_AMOUNT = 0.1;    // Example amount (0 to 1 typical)
+let TIME_PULSE_FREQUENCY = 3.4666; // Example frequency (cycles per second)
+let TIME_PULSE_AMOUNT = 0.3;    // Example amount (0 to 1 typical)
 
 // --- ADDED: Pulse Sync Frequency ---
 let PULSE_SYNC_FREQ = 1.0; // Retrigger frequency (1 = one cycle per width travelled)
@@ -130,7 +130,7 @@ let PALETTE_COLOR_F = '#F2585B';
 #100F0F
 #205EA6 // nice to use with 3734DA
 #3734DA // very very nice with C73868
-#261C39
+#261C39 // nice with #542636 too
 */
 
 /* purple/black on teal/blue (not that good)
@@ -138,6 +138,13 @@ let PALETTE_COLOR_F = '#F2585B';
 #3734DA
 #ED4596
 #261C39
+*/
+
+/* superb red/maroon on teal/blue
+#3734DA // nice with 100F0F
+#33E6DA
+#C73868
+#261C39 // nice with #542636 too
 */
 
 /* very nice red/orange on blue/magenta
