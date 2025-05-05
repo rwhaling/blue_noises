@@ -364,6 +364,22 @@ let AUDIO_MOD_SCALE = 4.0; // Adjust this to control how much audio affects the 
 // --- ADDED: Audio Sensitivity ---
 let AUDIO_SENSITIVITY = 0.1; // Default sensitivity threshold (0 to 1)
 
+// --- ADDED: Color Transition State ---
+let isTransitioning = false;
+let transitionStartTime = 0;
+const TRANSITION_DURATION = 200; // Milliseconds
+
+// --- ADDED: Store current and target colors ---
+let currentGradientColorA = GRADIENT_COLOR_A;
+let currentGradientColorB = GRADIENT_COLOR_B;
+let currentPaletteColorC = PALETTE_COLOR_C;
+let currentPaletteColorD = PALETTE_COLOR_D;
+
+let targetGradientColorA = GRADIENT_COLOR_A;
+let targetGradientColorB = GRADIENT_COLOR_B;
+let targetPaletteColorC = PALETTE_COLOR_C;
+let targetPaletteColorD = PALETTE_COLOR_D;
+
 export function setup({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
     // REMOVE old initWebGL call
     // initWebGL(canvasWebGL);
@@ -416,6 +432,34 @@ export function draw({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
 
     const width = canvasWebGL.width;
     const height = canvasWebGL.height;
+
+    // --- ADDED: Color Transition Logic ---
+    const now = Date.now();
+    if (isTransitioning) {
+        const elapsedTime = now - transitionStartTime;
+        const progress = Math.min(1, elapsedTime / TRANSITION_DURATION);
+
+        // Interpolate colors
+        GRADIENT_COLOR_A = lerpHexColor(currentGradientColorA, targetGradientColorA, progress);
+        GRADIENT_COLOR_B = lerpHexColor(currentGradientColorB, targetGradientColorB, progress);
+        PALETTE_COLOR_C = lerpHexColor(currentPaletteColorC, targetPaletteColorC, progress);
+        PALETTE_COLOR_D = lerpHexColor(currentPaletteColorD, targetPaletteColorD, progress);
+
+        if (progress >= 1) {
+            isTransitioning = false;
+            // Snap to final target colors to avoid floating point issues
+            currentGradientColorA = targetGradientColorA;
+            currentGradientColorB = targetGradientColorB;
+            currentPaletteColorC = targetPaletteColorC;
+            currentPaletteColorD = targetPaletteColorD;
+            // Ensure the main variables are also precisely the target ones
+            GRADIENT_COLOR_A = targetGradientColorA;
+            GRADIENT_COLOR_B = targetGradientColorB;
+            PALETTE_COLOR_C = targetPaletteColorC;
+            PALETTE_COLOR_D = targetPaletteColorD;
+        }
+    }
+    // --- END Color Transition Logic ---
 
     // --- ADD BACK: Time Calculation ---
     const timeIncrementBase = 1.0 / FRAMES_PER_SECOND;
@@ -731,16 +775,26 @@ function takeSnapshot() {
 
 // --- ADDED: Function to update palette and UI ---
 function updatePalette() {
+    // Store the colors *before* changing the palette index
+    currentGradientColorA = GRADIENT_COLOR_A;
+    currentGradientColorB = GRADIENT_COLOR_B;
+    currentPaletteColorC = PALETTE_COLOR_C;
+    currentPaletteColorD = PALETTE_COLOR_D;
+
     // Increment and wrap palette index
     CURRENT_PALETTE = (CURRENT_PALETTE + 1) % PALETTES.length;
 
-    // Update global color variables
-    GRADIENT_COLOR_A = PALETTES[CURRENT_PALETTE][0];
-    GRADIENT_COLOR_B = PALETTES[CURRENT_PALETTE][1];
-    PALETTE_COLOR_C = PALETTES[CURRENT_PALETTE][2];
-    PALETTE_COLOR_D = PALETTES[CURRENT_PALETTE][3];
+    // --- UPDATED: Set target colors instead of directly updating ---
+    targetGradientColorA = PALETTES[CURRENT_PALETTE][0];
+    targetGradientColorB = PALETTES[CURRENT_PALETTE][1];
+    targetPaletteColorC = PALETTES[CURRENT_PALETTE][2];
+    targetPaletteColorD = PALETTES[CURRENT_PALETTE][3];
 
-    // Update UI elements
+    // --- ADDED: Start transition ---
+    isTransitioning = true;
+    transitionStartTime = Date.now();
+
+    // Update UI elements (still reflect the target immediately)
     const paletteButton = document.getElementById('palette-button');
     const colorAInput = document.getElementById('color-a-input') as HTMLInputElement | null;
     const colorBInput = document.getElementById('color-b-input') as HTMLInputElement | null;
@@ -750,13 +804,14 @@ function updatePalette() {
     if (paletteButton) {
         paletteButton.textContent = `Palette ${CURRENT_PALETTE + 1}`; // Display 1-based index
     }
-    if (colorAInput) colorAInput.value = GRADIENT_COLOR_A;
-    if (colorBInput) colorBInput.value = GRADIENT_COLOR_B;
-    if (colorCInput) colorCInput.value = PALETTE_COLOR_C;
-    if (colorDInput) colorDInput.value = PALETTE_COLOR_D;
+    // --- UPDATED: Set UI inputs to target colors ---
+    if (colorAInput) colorAInput.value = targetGradientColorA;
+    if (colorBInput) colorBInput.value = targetGradientColorB;
+    if (colorCInput) colorCInput.value = targetPaletteColorC;
+    if (colorDInput) colorDInput.value = targetPaletteColorD;
 
     // Optional: Log the change
-    console.log(`Switched to Palette ${CURRENT_PALETTE + 1}`);
+    console.log(`Starting transition to Palette ${CURRENT_PALETTE + 1}`);
 }
 // --- End Palette Update Function ---
 
@@ -1283,3 +1338,21 @@ function hexToRgb01Local(hex: string): [number, number, number] {
         (n & 0xff) / 255
     ];
 }
+
+// --- ADDED: Helper function to lerp between two hex colors ---
+function lerpHexColor(hexA: string, hexB: string, t: number): string {
+    const rgbA = hexToRgb01Local(hexA).map(c => c * 255);
+    const rgbB = hexToRgb01Local(hexB).map(c => c * 255);
+
+    const r = Math.round(rgbA[0] + (rgbB[0] - rgbA[0]) * t);
+    const g = Math.round(rgbA[1] + (rgbB[1] - rgbA[1]) * t);
+    const b = Math.round(rgbA[2] + (rgbB[2] - rgbA[2]) * t);
+
+    const toHex = (c: number) => {
+        const hex = c.toString(16);
+        return hex.length === 1 ? "0" + hex : hex;
+    };
+
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+// --- END Helper function ---
