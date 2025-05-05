@@ -91,7 +91,7 @@ let WAVE_XSCALE = 0.1;      // NEW: x scale for the wave
 let WAVE_TIMESCALE = 0.1;   // NEW: time scale for the wave
 
 // --- ADDED: Time Pulse Parameters ---
-let TIME_PULSE_FREQUENCY = 3.4666; // Example frequency (cycles per second)
+let TIME_PULSE_FREQUENCY = 1.7333; // Example frequency (cycles per second)
 let TIME_PULSE_AMOUNT = 0.3;    // Example amount (0 to 1 typical)
 
 // --- ADDED: Pulse Sync Frequency ---
@@ -100,15 +100,19 @@ let PULSE_SYNC_FREQ = 1.0; // Retrigger frequency (1 = one cycle per width trave
 // --- MOVED: Declare HEXAGON_WIDTH before it's used in snapshotValues ---
 let HEXAGON_WIDTH = 150 * Math.sqrt(3); // NEW: Max geometric width of the drawn hex within the pulse window. Initialized same as pulse width.
 
+let PALETTES = [
+    ["#100F0F", "#3734DA", "#3734DA", "#33E6DA"],
+    ["#357DC0", "#3734DA", "#3734DA", "#33E6DA"],
+    
+]
+let CURRENT_PALETTE = 1;
 // Palette Colors
-let GRADIENT_COLOR_A = '#100F0F'; // Base Color AED4596
-let GRADIENT_COLOR_B = '#3734DA'; // Base Color swap to A145ED
+let GRADIENT_COLOR_A = PALETTES[CURRENT_PALETTE][0]; // nice to swap in 357DC0 also
+let GRADIENT_COLOR_B = PALETTES[CURRENT_PALETTE][1]; // Base Color swap to A145ED
 // --- Step 1: Add New Color Constants ---
-let PALETTE_COLOR_C = '#3734DA'; // Color for opaque black elements - CHANGED to let
-let PALETTE_COLOR_D = '#33E6DA'; // Color for opaque white elements (unused for now) - CHANGED to let
+let PALETTE_COLOR_C = PALETTES[CURRENT_PALETTE][2]; // Color for opaque black elements - CHANGED to let
+let PALETTE_COLOR_D = PALETTES[CURRENT_PALETTE][3]; // Color for opaque white elements (unused for now) - CHANGED to let
 
-let PALETTE_COLOR_E = '#C73868';
-let PALETTE_COLOR_F = '#F2585B';
 // 33E6DA
 // 3734DA
 // 
@@ -127,6 +131,21 @@ let PALETTE_COLOR_F = '#F2585B';
 
 // 261C39
 // 3734DA
+
+/* nice light mode teal/pink
+#357Dc0
+#C73868
+#261C39
+#ED4596
+*/
+
+/* nice light mode blue on teal
+#357DC0
+#3d2D5B
+#3734DA // nice with C73868
+#33E6DA
+*/
+
 
 // very nice together
 // #33E6DA
@@ -1114,12 +1133,16 @@ export function start(contexts: CanvasContexts) {
         });
     }
     if (noiseSpeedSlider && noiseSpeedValueSpan) {
+        noiseSpeedSlider.min = "0"; // ADDED: Explicitly set min
+        noiseSpeedSlider.max = "50"; // ADDED: Explicitly set max based on 0-5 range and scale factor 10
+        noiseSpeedSlider.step = "0.25"; // ADDED: Set step to match 0.025 increments
         noiseSpeedSlider.value = (NOISE_SPEED * 10.0).toString(); // Set initial slider position
-        noiseSpeedValueSpan.textContent = NOISE_SPEED.toFixed(1);
+        noiseSpeedValueSpan.textContent = NOISE_SPEED.toFixed(1); // Keep displaying 1 decimal for noise speed value
         noiseSpeedSlider.addEventListener('input', (e) => {
             const sliderValue = parseFloat((e.target as HTMLInputElement).value);
             NOISE_SPEED = sliderValue / 10.0;
-            noiseSpeedValueSpan.textContent = NOISE_SPEED.toFixed(1);
+            // Update display to show more precision if needed, e.g., toFixed(3)
+            noiseSpeedValueSpan.textContent = NOISE_SPEED.toFixed(3); // UPDATED: Show 3 decimal places
         });
     }
     if (gridScaleSlider && gridScaleValueSpan) {
@@ -1248,8 +1271,8 @@ export function start(contexts: CanvasContexts) {
     // Pulse Speed (RENAMED from Offset)
     if (hexagonPulseSpeedSlider && hexagonPulseSpeedValueSpan) {
         // Define reasonable min/max for speed (pixels/sec or units/sec)
-        hexagonPulseSpeedSlider.min = "-2000"; // Example range
-        hexagonPulseSpeedSlider.max = "2000";
+        hexagonPulseSpeedSlider.min = "0"; // UPDATED: Set min to 0
+        hexagonPulseSpeedSlider.max = "500"; // UPDATED: Set max to 500
         hexagonPulseSpeedSlider.step = "1"; // Adjust step as needed
         hexagonPulseSpeedSlider.value = HEXAGON_PULSE_SPEED.toString();
         hexagonPulseSpeedValueSpan.textContent = HEXAGON_PULSE_SPEED.toFixed(3); // Show precision
