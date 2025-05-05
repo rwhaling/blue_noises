@@ -101,36 +101,27 @@ let PULSE_SYNC_FREQ = 1.0; // Retrigger frequency (1 = one cycle per width trave
 let HEXAGON_WIDTH = 150 * Math.sqrt(3); // NEW: Max geometric width of the drawn hex within the pulse window. Initialized same as pulse width.
 
 let PALETTES = [
-    ["#100F0F", "#3734DA", "#3734DA", "#33E6DA"],
-    ["#357DC0", "#3734DA", "#3734DA", "#33E6DA"],
-    
-]
-let CURRENT_PALETTE = 1;
-// Palette Colors
-let GRADIENT_COLOR_A = PALETTES[CURRENT_PALETTE][0]; // nice to swap in 357DC0 also
-let GRADIENT_COLOR_B = PALETTES[CURRENT_PALETTE][1]; // Base Color swap to A145ED
-// --- Step 1: Add New Color Constants ---
-let PALETTE_COLOR_C = PALETTES[CURRENT_PALETTE][2]; // Color for opaque black elements - CHANGED to let
-let PALETTE_COLOR_D = PALETTES[CURRENT_PALETTE][3]; // Color for opaque white elements (unused for now) - CHANGED to let
+    ["#100F0F", "#3734DA", "#3734DA", "#33E6DA"], // Palette 1 (Index 0)
+    ["#357DC0", "#3734DA", "#3734DA", "#33E6DA"], // Palette 2 (Index 1)
+    ["#357DC0", "#3D2D5B", "#3734DA", "#33E6DA"], // Palette 3 (Index 1)
+    ["#357DC0", "#3D2D5B", "#33E6DA", "#C73868"], // Palette 4 (Index 1)
+    ["#357DC0", "#3D2D5B", "#3734DA", "#ED4596"], // Palette 5 (Index 1)
 
-// 33E6DA
-// 3734DA
-// 
-// A145ED
-// ED4596
-// C73868
+    ["#ED4596", "#3734DA", "#542636", "#F2585B"], // Palette 6 (Index 2)
+    ["#ED4596", "#3D2D5B", "#100F0F", "#C73868"], // Palette 7 (Index 2)
+    ["#33E6DA", "#261C39", "#261C39", "#F2585B"], // Palette 8 (Index 2)
+    ["#33E6DA", "#261C39", "#261C39", "#ED4596"], // Palette 9 (Index 2)
+    ["#100F0F", "#3734DA", "#33E6DA", "#C73868"], // Palette 10 (Index 3)
+    ["#3734DA", "#C73868", "#33E6DA", "#261C39"], // Palette 11 (Index 4)
+    ["#3734DA", "#100F0F", "#33E6DA", "#261C39"], // Palette 11 (Index 4)
 
-// 8F34DA
-// AED4596
-
-// 8F34DA
-// 3171B2
-
-// 261C39
-// 3171B2
-
-// 261C39
-// 3734DA
+];
+let CURRENT_PALETTE = 0; // UPDATED: Start at index 0
+// Palette Colors - Initialize using CURRENT_PALETTE
+let GRADIENT_COLOR_A = PALETTES[CURRENT_PALETTE][0];
+let GRADIENT_COLOR_B = PALETTES[CURRENT_PALETTE][1];
+let PALETTE_COLOR_C = PALETTES[CURRENT_PALETTE][2];
+let PALETTE_COLOR_D = PALETTES[CURRENT_PALETTE][3];
 
 /* nice light mode teal/pink
 #357Dc0
@@ -738,131 +729,36 @@ function takeSnapshot() {
 }
 // --- End Snapshot function ---
 
-// Modify Reset function
-function resetParametersToSnapshot() {
-    // --- REMOVE Stop animation ---
-    // if (isAnimating) { ... }
+// --- ADDED: Function to update palette and UI ---
+function updatePalette() {
+    // Increment and wrap palette index
+    CURRENT_PALETTE = (CURRENT_PALETTE + 1) % PALETTES.length;
 
-    // Restore values from snapshot
-    GRID_SCALE = snapshotValues.gridScale;
-    SHAPE_NOISE_AMPLITUDE = snapshotValues.shapeAmplitude; // Reset base amplitude
-    NOISE_AMPLITUDE = snapshotValues.gradientAmplitude;
-    HEXAGON_WIDTH = snapshotValues.hexagonWidth;
-    AUDIO_MOD_SCALE = snapshotValues.audioModScale; // ADDED: Restore audio mod scale
-    AUDIO_SENSITIVITY = snapshotValues.audioSensitivity ?? 0.1; // Restore or use default
-    // ADDED: Restore base HF shape amount from snapshot, or use default if snapshot didn't have it
-    HIGH_FREQ_SHAPE_NOISE_AMOUNT = snapshotValues.hfShapeAmount ?? 0.0; // Default to 0.0 if missing
+    // Update global color variables
+    GRADIENT_COLOR_A = PALETTES[CURRENT_PALETTE][0];
+    GRADIENT_COLOR_B = PALETTES[CURRENT_PALETTE][1];
+    PALETTE_COLOR_C = PALETTES[CURRENT_PALETTE][2];
+    PALETTE_COLOR_D = PALETTES[CURRENT_PALETTE][3];
 
-    // Reset audio mod factor to neutral (0)
-    SHAPE_AUDIO_MOD = 0.0;
-    // REMOVED: Reset effective amplitude based on reset base amplitude and 0 audio mod
-    // EFF_SHAPE_NOISE_AMPLITUDE = SHAPE_NOISE_AMPLITUDE + SHAPE_AUDIO_MOD * AUDIO_MOD_SCALE;
+    // Update UI elements
+    const paletteButton = document.getElementById('palette-button');
+    const colorAInput = document.getElementById('color-a-input') as HTMLInputElement | null;
+    const colorBInput = document.getElementById('color-b-input') as HTMLInputElement | null;
+    const colorCInput = document.getElementById('color-c-input') as HTMLInputElement | null;
+    const colorDInput = document.getElementById('color-d-input') as HTMLInputElement | null;
 
-    // --- ADDED: Recalculate effective HF amount based on reset base HF and 0 audio mod ---
-    const EFF_HIGH_FREQ_SHAPE_NOISE_AMOUNT_RESET = HIGH_FREQ_SHAPE_NOISE_AMOUNT; // Simpler calculation now
-
-    // --- ADDED: Reset hexagon phase ---
-    hexagonPhase = 0.0; // Keep reset for accumulated distance
-
-    console.log('Parameters reset to snapshot:', snapshotValues);
-    console.log('Hexagon phase reset.');
-    console.log(`Shape audio modulation factor reset to: ${SHAPE_AUDIO_MOD.toFixed(2)}`);
-    // console.log(`Effective shape noise amplitude reset to: ${EFF_SHAPE_NOISE_AMPLITUDE.toFixed(2)}`); // REMOVED log
-    console.log(`Base high-frequency shape amount reset to: ${HIGH_FREQ_SHAPE_NOISE_AMOUNT.toFixed(2)}`); // ADDED log for base
-    console.log(`Effective high-frequency shape amount reset to: ${EFF_HIGH_FREQ_SHAPE_NOISE_AMOUNT_RESET.toFixed(2)}`); // ADDED log for effective
-    console.log(`Audio Mod Scale reset to: ${AUDIO_MOD_SCALE.toFixed(2)}`); // ADDED log
-    console.log(`Audio Sensitivity reset to: ${AUDIO_SENSITIVITY.toFixed(4)}`); // {{ EDIT: Format }}
-
-    // --- ADDED: Update sliders and value spans to match snapshot ---
-    const gridScaleSlider = document.getElementById('grid-scale-slider') as HTMLInputElement | null;
-    const gridScaleValueSpan = document.getElementById('grid-scale-value');
-    if (gridScaleSlider && gridScaleValueSpan) {
-        // Reverse the quadratic scale calculation to set slider position
-        // GRID_SCALE = 1.0 + s*s * 63.0  => s = sqrt((GRID_SCALE - 1.0) / 63.0)
-        const s_grid = Math.sqrt(Math.max(0, (GRID_SCALE - 1.0)) / 63.0); // Ensure non-negative arg for sqrt
-        gridScaleSlider.value = (s_grid * 100.0).toString();
-        gridScaleValueSpan.textContent = GRID_SCALE.toFixed(2);
+    if (paletteButton) {
+        paletteButton.textContent = `Palette ${CURRENT_PALETTE + 1}`; // Display 1-based index
     }
+    if (colorAInput) colorAInput.value = GRADIENT_COLOR_A;
+    if (colorBInput) colorBInput.value = GRADIENT_COLOR_B;
+    if (colorCInput) colorCInput.value = PALETTE_COLOR_C;
+    if (colorDInput) colorDInput.value = PALETTE_COLOR_D;
 
-    const shapeAmpSlider = document.getElementById('shape-amplitude-slider') as HTMLInputElement | null;
-    const shapeAmpValueSpan = document.getElementById('shape-amplitude-value');
-    if (shapeAmpSlider && shapeAmpValueSpan) {
-        // EDIT: Update the display based on the snapshot value (this slider now controls the base amplitude directly)
-        shapeAmpValueSpan.textContent = SHAPE_NOISE_AMPLITUDE.toFixed(2);
-        shapeAmpSlider.value = (SHAPE_NOISE_AMPLITUDE * 25.0).toString(); // Reset slider position
-        // shapeAmpSlider.disabled = false; // Re-enable if it was disabled previously
-    }
-
-    const noiseAmpSlider = document.getElementById('noise-amplitude-slider') as HTMLInputElement | null;
-    const noiseAmpValueSpan = document.getElementById('noise-amplitude-value');
-    if (noiseAmpSlider && noiseAmpValueSpan) {
-        // NOISE_AMPLITUDE = sliderValue / 25.0 => sliderValue = NOISE_AMPLITUDE * 25.0
-        noiseAmpSlider.value = (NOISE_AMPLITUDE * 25.0).toString();
-        noiseAmpValueSpan.textContent = NOISE_AMPLITUDE.toFixed(2);
-    }
-
-    const hexagonPulseSpeedSlider = document.getElementById('hexagon-pulse-speed-slider') as HTMLInputElement | null;
-    const hexagonPulseSpeedValueSpan = document.getElementById('hexagon-pulse-speed-value');
-    if (hexagonPulseSpeedSlider && hexagonPulseSpeedValueSpan) {
-        const defaultSpeed = 0.0;
-        hexagonPulseSpeedSlider.value = defaultSpeed.toString(); // Reset speed to 0
-        HEXAGON_PULSE_SPEED = defaultSpeed; // Update variable too
-        hexagonPulseSpeedValueSpan.textContent = defaultSpeed.toFixed(3);
-    }
-
-    // --- ADDED: Reset PULSE_SYNC_FREQ slider ---
-    const pulseSyncFreqSlider = document.getElementById('pulse-sync-freq-slider') as HTMLInputElement | null;
-    const pulseSyncFreqValueSpan = document.getElementById('pulse-sync-freq-value');
-    if (pulseSyncFreqSlider && pulseSyncFreqValueSpan) {
-        const defaultFreq = 1.0;
-        pulseSyncFreqSlider.value = defaultFreq.toString(); // Set slider to default 1.0
-        PULSE_SYNC_FREQ = defaultFreq; // Update variable
-        pulseSyncFreqValueSpan.textContent = defaultFreq.toFixed(1);
-    }
-
-    // --- ADDED: Reset HEXAGON_WIDTH slider ---
-    const hexagonWidthSlider = document.getElementById('hexagon-width-slider') as HTMLInputElement | null;
-    const hexagonWidthValueSpan = document.getElementById('hexagon-width-value');
-    if (hexagonWidthSlider && hexagonWidthValueSpan) {
-        hexagonWidthSlider.value = HEXAGON_WIDTH.toString(); // Set slider to snapshot value
-        hexagonWidthValueSpan.textContent = HEXAGON_WIDTH.toFixed(0);
-    }
-
-    // --- ADDED: Update Audio Mod Scale slider ---
-    const audioModScaleSlider = document.getElementById('audio-mod-scale-slider') as HTMLInputElement | null;
-    const audioModScaleValueSpan = document.getElementById('audio-mod-scale-value');
-    if (audioModScaleSlider && audioModScaleValueSpan) {
-        // Reverse the quadratic scale: s = sqrt(AUDIO_MOD_SCALE / 64.0)
-        const initialS_audio = Math.sqrt(AUDIO_MOD_SCALE / 64.0);
-        audioModScaleSlider.value = (initialS_audio * 100.0).toString();
-        audioModScaleValueSpan.textContent = AUDIO_MOD_SCALE.toFixed(2);
-    }
-
-    // --- ADDED: Update High-Frequency Shape Amount slider ---
-    const hfShapeAmountSlider = document.getElementById('hf-shape-amount-slider') as HTMLInputElement | null;
-    const hfShapeAmountValueSpan = document.getElementById('hf-shape-amount-value');
-    if (hfShapeAmountSlider && hfShapeAmountValueSpan) {
-        // Update the display based on the snapshot value (this slider controls the base amount)
-        hfShapeAmountValueSpan.textContent = HIGH_FREQ_SHAPE_NOISE_AMOUNT.toFixed(2);
-        // Reset the slider position based on the base value
-        hfShapeAmountSlider.value = (HIGH_FREQ_SHAPE_NOISE_AMOUNT * 25.0).toString(); // Assuming same scale
-        // Optionally indicate that audio modulates this:
-        // hfShapeAmountValueSpan.textContent = `${HIGH_FREQ_SHAPE_NOISE_AMOUNT.toFixed(2)} (modulated)`;
-    }
-
-    // --- ADDED: Update Audio Sensitivity slider ---
-    const audioSensitivitySlider = document.getElementById('audio-sensitivity-slider') as HTMLInputElement | null;
-    const audioSensitivityValueSpan = document.getElementById('audio-sensitivity-value');
-    if (audioSensitivitySlider && audioSensitivityValueSpan) {
-        // {{ EDIT: Update scaling logic and formatting }}
-        // Slider 1-200 maps to 0.0025 - 0.5. S = V / 0.0025
-        const sliderValue = Math.round(AUDIO_SENSITIVITY / 0.0025);
-        audioSensitivitySlider.value = sliderValue.toString();
-        audioSensitivityValueSpan.textContent = AUDIO_SENSITIVITY.toFixed(4); // Show 4 decimal places
-    }
-    // --- End Slider Updates ---
+    // Optional: Log the change
+    console.log(`Switched to Palette ${CURRENT_PALETTE + 1}`);
 }
-// --- End Reset Parameters function ---
+// --- End Palette Update Function ---
 
 // Add back rendering control functions
 async function startRendering() {
@@ -982,10 +878,11 @@ export function start(contexts: CanvasContexts) {
     const renderButton = document.querySelector('#render-button');
     renderButton?.addEventListener('click', startRendering);
 
-    // --- MODIFY: Update Reset button listener ---
-    const resetButton = document.querySelector('#reset-button');
-    resetButton?.addEventListener('click', resetParametersToSnapshot); // Use the updated function
-    // --- End Reset button listener ---
+    // --- ADDED: Palette button listener ---
+    const paletteButton = document.querySelector('#palette-button');
+    paletteButton?.addEventListener('click', updatePalette);
+    // --- End Palette button listener ---
+
 
     // --- ADDED: Snapshot button listener ---
     const snapshotButton = document.querySelector('#snapshot-button');
@@ -1053,10 +950,10 @@ export function start(contexts: CanvasContexts) {
     // --- End Toggle Controls Button Setup ---
 
     // --- COLOR INPUT SETUP ---
-    const colorAInput = document.getElementById('color-a-input') as HTMLInputElement;
-    const colorBInput = document.getElementById('color-b-input') as HTMLInputElement;
-    const colorCInput = document.getElementById('color-c-input') as HTMLInputElement;
-    const colorDInput = document.getElementById('color-d-input') as HTMLInputElement;
+    const colorAInput = document.getElementById('color-a-input') as HTMLInputElement | null;
+    const colorBInput = document.getElementById('color-b-input') as HTMLInputElement | null;
+    const colorCInput = document.getElementById('color-c-input') as HTMLInputElement | null;
+    const colorDInput = document.getElementById('color-d-input') as HTMLInputElement | null;
 
     // Helper to validate hex color (simple check)
     const isValidHex = (hex: string): boolean => /^#[0-9A-F]{6}$/i.test(hex) || /^#[0-9A-F]{3}$/i.test(hex);
