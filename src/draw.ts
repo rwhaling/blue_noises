@@ -66,7 +66,7 @@ const BLUR_PASSES = 0;   // Example blur passes
 let NOISE_CENTER = 0.4;
 let NOISE_WIDTH = 0.55;
 let NOISE_AMPLITUDE = 1.2;
-let NOISE_SPEED = 0.8;          // Speed for displacement noise
+let NOISE_SPEED = 0.4;          // Speed for displacement noise
 let NOISE_SCALE = 1.51; // 5.11, 1.51, 0.33
 let NOISE_OFFSET_SCALE = 0.7;
 let GRID_SCALE = 1.51; 
@@ -101,7 +101,7 @@ let PULSE_SYNC_FREQ = 1.0; // Retrigger frequency (1 = one cycle per width trave
 let HEXAGON_WIDTH = 150 * Math.sqrt(3); // NEW: Max geometric width of the drawn hex within the pulse window. Initialized same as pulse width.
 
 // Palette Colors
-let GRADIENT_COLOR_A = '#3D2D5B'; // Base Color AED4596
+let GRADIENT_COLOR_A = '#100F0F'; // Base Color AED4596
 let GRADIENT_COLOR_B = '#3734DA'; // Base Color swap to A145ED
 // --- Step 1: Add New Color Constants ---
 let PALETTE_COLOR_C = '#3734DA'; // Color for opaque black elements - CHANGED to let
@@ -139,27 +139,6 @@ let PALETTE_COLOR_F = '#F2585B';
 #33E6DA
 */
 
-/* 
-#100F0F
-#205EA6 // nice to use with 3734DA
-#3734DA // very very nice with C73868
-#261C39 // nice with #542636 too
-*/
-
-/* purple/black on teal/blue (not that good)
-#33E6DA
-#3734DA
-#ED4596
-#261C39
-*/
-
-/* superb red/maroon on teal/blue
-#3734DA // nice with 100F0F
-#33E6DA
-#C73868
-#261C39 // nice with #542636 too
-*/
-
 /* very nice red/orange on blue/magenta
 nice with music
 #ED4596 // nice with 100F0F too at large grids
@@ -183,6 +162,29 @@ nice with music
 #33E6DA
 #C73868 // very nice with 261C39 too
 */
+
+/* 
+#100F0F
+#205EA6 // nice to use with 3734DA
+#3734DA // very very nice with C73868
+#261C39 // nice with #542636 too
+*/
+
+/* purple/black on teal/blue (not that good)
+#33E6DA
+#3734DA
+#ED4596
+#261C39
+*/
+
+/* superb red/maroon on teal/blue
+#3734DA // nice with 100F0F
+#33E6DA
+#C73868
+#261C39 // nice with #542636 too
+*/
+
+
 
 /* very nice purple on teal
 #100F0F
@@ -349,6 +351,9 @@ let SHAPE_AUDIO_MOD = 0.0; // Represents the intensity/factor of modulation from
 // ADD a scaling factor for the audio modulation - CHANGED to let
 let AUDIO_MOD_SCALE = 4.0; // Adjust this to control how much audio affects the amount
 
+// --- ADDED: Audio Sensitivity ---
+let AUDIO_SENSITIVITY = 0.1; // Default sensitivity threshold (0 to 1)
+
 export function setup({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
     // REMOVE old initWebGL call
     // initWebGL(canvasWebGL);
@@ -417,18 +422,48 @@ export function draw({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
     // --- End Phase Update ---
 
     // --- Update SHAPE_AUDIO_MOD based on audio level ---
+    let rawAudioLevel = 0.0; // Store the raw level first
     if (isAudioReady && audioAnalyzer) {
-        // Get the raw smoothed audio level (0-1) and store it as the modulation factor
-        SHAPE_AUDIO_MOD = audioAnalyzer.getSmoothedLevel();
-    } else {
-        // If audio isn't ready, set modulation factor to neutral (0)
-        SHAPE_AUDIO_MOD = 0.0;
+        // Get the raw smoothed audio level (0-1)
+        rawAudioLevel = audioAnalyzer.getSmoothedLevel();
     }
+
+    // Apply sensitivity threshold and rescaling
+    let effectiveAudioMod = 0.0;
+    if (rawAudioLevel >= AUDIO_SENSITIVITY) {
+        // Prevent division by zero if sensitivity is 1.0
+        const denominator = Math.max(1e-6, 1.0 - AUDIO_SENSITIVITY);
+        // Scale the level from [AUDIO_SENSITIVITY, 1] to [0, 1]
+        effectiveAudioMod = (rawAudioLevel - AUDIO_SENSITIVITY) / denominator;
+        // Clamp to ensure it stays within [0, 1] due to potential floating point inaccuracies
+        effectiveAudioMod = Math.max(0, Math.min(1, effectiveAudioMod));
+    }
+    // If rawAudioLevel < AUDIO_SENSITIVITY, effectiveAudioMod remains 0.0
+
+    // {{ ADDED: Debug Logging - Remove or comment out later }}
+    // Limit logging to prevent spamming the console too much
+    if (frameCount % 60 === 0) { // Log once per second (assuming 60fps)
+        console.log(`Audio Debug: raw=${rawAudioLevel.toFixed(3)}, sens=${AUDIO_SENSITIVITY.toFixed(3)}, effectiveMod=${effectiveAudioMod.toFixed(3)}`);
+    }
+    // {{ END: Debug Logging }}
+
+
+    // Use the effectiveAudioMod for calculations
+    SHAPE_AUDIO_MOD = effectiveAudioMod; // Update the global variable if needed elsewhere, or just use effectiveAudioMod directly below
     // --- End Audio Modulation Factor Update ---
 
+
     // --- Calculate Effective High-Frequency Shape Amount ---
-    // Combine base HF amount (from slider) with the scaled audio modulation
-    const EFF_HIGH_FREQ_SHAPE_NOISE_AMOUNT = HIGH_FREQ_SHAPE_NOISE_AMOUNT + SHAPE_AUDIO_MOD * AUDIO_MOD_SCALE;
+    // Combine base HF amount (from slider) with the scaled *effective* audio modulation
+    const EFF_HIGH_FREQ_SHAPE_NOISE_AMOUNT = HIGH_FREQ_SHAPE_NOISE_AMOUNT + effectiveAudioMod * AUDIO_MOD_SCALE; // MODIFIED: Use effectiveAudioMod
+
+    // {{ ADDED: Debug Logging - Remove or comment out later }}
+    if (frameCount % 60 === 0) { // Log once per second
+         console.log(`HF Shape Debug: base=${HIGH_FREQ_SHAPE_NOISE_AMOUNT.toFixed(3)}, modScale=${AUDIO_MOD_SCALE.toFixed(3)}, effectiveAmount=${EFF_HIGH_FREQ_SHAPE_NOISE_AMOUNT.toFixed(3)}`);
+    }
+    // {{ END: Debug Logging }}
+
+
     // Optional: Clamp the effective amount if needed
     // EFF_HIGH_FREQ_SHAPE_NOISE_AMOUNT = Math.max(0, EFF_HIGH_FREQ_SHAPE_NOISE_AMOUNT);
     // --- End Effective HF Amount Calculation ---
@@ -678,6 +713,7 @@ function takeSnapshot() {
     snapshotValues.gradientAmplitude = NOISE_AMPLITUDE;
     snapshotValues.hexagonWidth = HEXAGON_WIDTH;
     snapshotValues.audioModScale = AUDIO_MOD_SCALE; // ADDED
+    snapshotValues.audioSensitivity = AUDIO_SENSITIVITY; // Store current sensitivity
     snapshotValues.hfShapeAmount = HIGH_FREQ_SHAPE_NOISE_AMOUNT; // ADDED: Snapshot base HF amount
     console.log('Snapshot taken:', snapshotValues);
 }
@@ -694,6 +730,7 @@ function resetParametersToSnapshot() {
     NOISE_AMPLITUDE = snapshotValues.gradientAmplitude;
     HEXAGON_WIDTH = snapshotValues.hexagonWidth;
     AUDIO_MOD_SCALE = snapshotValues.audioModScale; // ADDED: Restore audio mod scale
+    AUDIO_SENSITIVITY = snapshotValues.audioSensitivity ?? 0.1; // Restore or use default
     // ADDED: Restore base HF shape amount from snapshot, or use default if snapshot didn't have it
     HIGH_FREQ_SHAPE_NOISE_AMOUNT = snapshotValues.hfShapeAmount ?? 0.0; // Default to 0.0 if missing
 
@@ -703,7 +740,7 @@ function resetParametersToSnapshot() {
     // EFF_SHAPE_NOISE_AMPLITUDE = SHAPE_NOISE_AMPLITUDE + SHAPE_AUDIO_MOD * AUDIO_MOD_SCALE;
 
     // --- ADDED: Recalculate effective HF amount based on reset base HF and 0 audio mod ---
-    const EFF_HIGH_FREQ_SHAPE_NOISE_AMOUNT_RESET = HIGH_FREQ_SHAPE_NOISE_AMOUNT + SHAPE_AUDIO_MOD * AUDIO_MOD_SCALE;
+    const EFF_HIGH_FREQ_SHAPE_NOISE_AMOUNT_RESET = HIGH_FREQ_SHAPE_NOISE_AMOUNT; // Simpler calculation now
 
     // --- ADDED: Reset hexagon phase ---
     hexagonPhase = 0.0; // Keep reset for accumulated distance
@@ -715,6 +752,7 @@ function resetParametersToSnapshot() {
     console.log(`Base high-frequency shape amount reset to: ${HIGH_FREQ_SHAPE_NOISE_AMOUNT.toFixed(2)}`); // ADDED log for base
     console.log(`Effective high-frequency shape amount reset to: ${EFF_HIGH_FREQ_SHAPE_NOISE_AMOUNT_RESET.toFixed(2)}`); // ADDED log for effective
     console.log(`Audio Mod Scale reset to: ${AUDIO_MOD_SCALE.toFixed(2)}`); // ADDED log
+    console.log(`Audio Sensitivity reset to: ${AUDIO_SENSITIVITY.toFixed(4)}`); // {{ EDIT: Format }}
 
     // --- ADDED: Update sliders and value spans to match snapshot ---
     const gridScaleSlider = document.getElementById('grid-scale-slider') as HTMLInputElement | null;
@@ -791,6 +829,17 @@ function resetParametersToSnapshot() {
         hfShapeAmountSlider.value = (HIGH_FREQ_SHAPE_NOISE_AMOUNT * 25.0).toString(); // Assuming same scale
         // Optionally indicate that audio modulates this:
         // hfShapeAmountValueSpan.textContent = `${HIGH_FREQ_SHAPE_NOISE_AMOUNT.toFixed(2)} (modulated)`;
+    }
+
+    // --- ADDED: Update Audio Sensitivity slider ---
+    const audioSensitivitySlider = document.getElementById('audio-sensitivity-slider') as HTMLInputElement | null;
+    const audioSensitivityValueSpan = document.getElementById('audio-sensitivity-value');
+    if (audioSensitivitySlider && audioSensitivityValueSpan) {
+        // {{ EDIT: Update scaling logic and formatting }}
+        // Slider 1-200 maps to 0.0025 - 0.5. S = V / 0.0025
+        const sliderValue = Math.round(AUDIO_SENSITIVITY / 0.0025);
+        audioSensitivitySlider.value = sliderValue.toString();
+        audioSensitivityValueSpan.textContent = AUDIO_SENSITIVITY.toFixed(4); // Show 4 decimal places
     }
     // --- End Slider Updates ---
 }
@@ -967,6 +1016,9 @@ export function start(contexts: CanvasContexts) {
     // ADDED: Audio Mod Scale slider variables
     const audioModScaleSlider = document.getElementById('audio-mod-scale-slider') as HTMLInputElement;
     const audioModScaleValueSpan = document.getElementById('audio-mod-scale-value');
+    // ADDED: Audio Sensitivity slider variables
+    const audioSensitivitySlider = document.getElementById('audio-sensitivity-slider') as HTMLInputElement;
+    const audioSensitivityValueSpan = document.getElementById('audio-sensitivity-value');
 
 
     // --- Toggle Controls Button Setup ---
@@ -1268,6 +1320,22 @@ export function start(contexts: CanvasContexts) {
             const s = sliderValue / 100.0;
             AUDIO_MOD_SCALE = s * s * 64.0; // Apply quadratic scale (0-100 maps to 0-64)
             audioModScaleValueSpan.textContent = AUDIO_MOD_SCALE.toFixed(2);
+        });
+    }
+
+    // --- ADDED: Listener for Audio Sensitivity slider ---
+    if (audioSensitivitySlider && audioSensitivityValueSpan) {
+        // {{ EDIT: Update scaling logic and formatting }}
+        // Set initial slider position: V = S * 0.0025 => S = V / 0.0025
+        const initialSliderValue = Math.round(AUDIO_SENSITIVITY / 0.0025);
+        audioSensitivitySlider.value = initialSliderValue.toString();
+        audioSensitivityValueSpan.textContent = AUDIO_SENSITIVITY.toFixed(4); // Show 4 decimal places
+
+        audioSensitivitySlider.addEventListener('input', (e) => {
+            const sliderValue = parseFloat((e.target as HTMLInputElement).value);
+            // New scaling: Slider 1-200 maps to 0.0025 - 0.5
+            AUDIO_SENSITIVITY = sliderValue * 0.0025;
+            audioSensitivityValueSpan.textContent = AUDIO_SENSITIVITY.toFixed(4); // Update display format
         });
     }
     // --- END SLIDER LISTENERS ---
