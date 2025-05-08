@@ -102,17 +102,19 @@ let HEXAGON_WIDTH = 150 * Math.sqrt(3); // NEW: Max geometric width of the drawn
 
 let PALETTES = [
     ["#100F0F", "#3734DA", "#3734DA", "#33E6DA"], // Palette 1 (Index 0)
+    ["#357DC0", "#3D2D5B", "#33E6DA", "#C73868"], // Palette 2 (Index 1)
+    ["#ED4596", "#3734DA", "#542636", "#F2585B"], // Palette 3 (Index 2)
+    ["#261C39", "#3734DA", "#3734DA", "#33E6DA"], // Palette 4 (Index 0)
+    ["#3734DA", "#C73868", "#33E6DA", "#261C39"], // Palette 5 (Index 4)
+    ["#ED4596", "#3D2D5B", "#100F0F", "#C73868"], // Palette 6 (Index 2)
+    ["#357DC0", "#542636", "#33E6DA", "#261C39"], // Palette 7 (Index 1)
+    ["#33E6DA", "#542636", "#C73868", "#F2585B"], // Palette 9 (Index 2)
+    ["#357DC0", "#3D2D5B", "#3734DA", "#33E6DA"], // Palette 8 (Index 1)
+    ["#33E6DA", "#261C39", "#261C39", "#F2585B"], // Palette 9 (Index 2)
     ["#357DC0", "#3734DA", "#3734DA", "#33E6DA"], // Palette 2 (Index 1)
-    ["#357DC0", "#3D2D5B", "#3734DA", "#33E6DA"], // Palette 3 (Index 1)
-    ["#357DC0", "#3D2D5B", "#33E6DA", "#C73868"], // Palette 4 (Index 1)
     ["#357DC0", "#3D2D5B", "#3734DA", "#ED4596"], // Palette 5 (Index 1)
-
-    ["#ED4596", "#3734DA", "#542636", "#F2585B"], // Palette 6 (Index 2)
-    ["#ED4596", "#3D2D5B", "#100F0F", "#C73868"], // Palette 7 (Index 2)
-    ["#33E6DA", "#261C39", "#261C39", "#F2585B"], // Palette 8 (Index 2)
     ["#33E6DA", "#261C39", "#261C39", "#ED4596"], // Palette 9 (Index 2)
     ["#100F0F", "#3734DA", "#33E6DA", "#C73868"], // Palette 10 (Index 3)
-    ["#3734DA", "#C73868", "#33E6DA", "#261C39"], // Palette 11 (Index 4)
     ["#3734DA", "#100F0F", "#33E6DA", "#261C39"], // Palette 11 (Index 4)
 
 ];
@@ -1192,21 +1194,36 @@ export function start(contexts: CanvasContexts) {
 
     // --- Listeners for Hexagon (Window) sliders ---
     if (hexagonPulseStartSlider && hexagonPulseStartValueSpan) {
-        hexagonPulseStartSlider.max = contexts.canvasWebGL.width.toString();
-        if (HEXAGON_PULSE_START !== null) {
-             hexagonPulseStartSlider.value = HEXAGON_PULSE_START.toString();
-             hexagonPulseStartValueSpan.textContent = HEXAGON_PULSE_START.toFixed(0);
-        } else {
-            console.error("HEXAGON_PULSE_START is unexpectedly null after setup call!");
-            const defaultStart = contexts.canvasWebGL.width / 2;
-            hexagonPulseStartSlider.value = defaultStart.toString();
-            hexagonPulseStartValueSpan.textContent = defaultStart.toFixed(0);
-        }
+        // Get canvas dimensions needed for centering and wrapping
+        const canvasWidth = contexts.canvasWebGL.width;
+        const canvasCenter = canvasWidth / 2;
+
+        // Slider range is 0-1000 (defined in HTML)
+        // Slider value 0 corresponds to offset 0 (center)
+
+        // Set initial display based on HTML defaults (should be 0)
+        // Note: HEXAGON_PULSE_START is initialized to canvasCenter in setup()
+        hexagonPulseStartSlider.value = "0";
+        hexagonPulseStartValueSpan.textContent = "0";
 
         hexagonPulseStartSlider.addEventListener('input', (e) => {
-            const sliderValue = parseFloat((e.target as HTMLInputElement).value);
-            HEXAGON_PULSE_START = sliderValue; // Update the pulse start variable
-            hexagonPulseStartValueSpan.textContent = HEXAGON_PULSE_START.toFixed(0);
+            const sliderValue = parseFloat((e.target as HTMLInputElement).value); // This is 0-1000
+
+            // The slider value itself represents the desired offset from the center
+            // sliderValue = 0 means offset = 0
+            const currentOffset = sliderValue;
+
+            // Calculate the desired center position based on the offset
+            const desiredCenter = canvasCenter + currentOffset;
+
+            // Wrap the desired center position around the canvas width
+            const wrappedCenter = ((desiredCenter % canvasWidth) + canvasWidth) % canvasWidth;
+
+            HEXAGON_PULSE_START = wrappedCenter; // Update the actual pulse start (center) variable
+            hexagonPhase = 0.0; // Reset the phase when start position changes
+
+            // Update the span to show the current slider value (0-1000)
+            hexagonPulseStartValueSpan.textContent = sliderValue.toFixed(0);
         });
     }
 

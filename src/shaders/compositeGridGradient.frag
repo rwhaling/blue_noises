@@ -218,7 +218,7 @@ void main() {
     // Use texture coordinates scaled by frequency for grain input
     vec2 grainCoord = v_texCoord * 200.0;
     // Calculate noise, approx [-1, 1]
-    float grainValue = snoise(vec3(grainCoord, u_time * 2.0));
+    float grainValue = snoise(vec3(grainCoord * 1.3, u_time * 2.0));
     // Scale noise by gain and add to the mapped value
     mappedValue += grainValue * u_grainAmplitude;
 

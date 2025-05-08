@@ -24,17 +24,16 @@ html, body {
 /* New style for the flex container */
 #main-content {
   display: flex;
-  justify-content: center; /* Center canvas/sidebar group */
   align-items: flex-start; /* Align tops */
   width: 100%;
-  /* Max width: 800 (canvas) + 40 (padding) + 70 (buffer) = 910 */
-  /* Or simply let canvas define width */
-  max-width: 800px; /* ADJUSTED max-width (or remove if canvas width dictates) */
+  /* Max width: 1000 (canvas) + some padding/buffer if needed */
+  /* Let canvas define width for now */
+  max-width: 1300px; /* ADJUSTED max-width to match new canvas width */
 }
 
 #canvas-container {
-  width: 800px; /* UPDATED to match canvas */
-  height: 600px; /* UPDATED to match canvas */
+  width: 1300px; /* UPDATED to match canvas */
+  height: 900px; /* UPDATED to match canvas */
   position: relative; /* Still needed for canvas layering */
   /* margin: 0 auto; */ /* Remove margin, flexbox handles centering */
   flex-shrink: 0; /* Prevent canvas from shrinking */
@@ -93,7 +92,7 @@ html, body {
   top: 20px;       /* <<< ADDED positioning */
   right: 20px;      /* <<< ADDED positioning */
   z-index: 10;      /* <<< ADDED z-index to be above canvas */
-  width: 214px;
+  width: 320px;
   /* flex-shrink: 0; */ /* <<< REMOVED flex property */
   /* height: fit-content; */ /* <<< REMOVED explicit height */
   max-height: calc(100vh - 40px); /* <<< ADDED max-height calculation */
