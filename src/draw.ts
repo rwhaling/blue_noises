@@ -12,6 +12,19 @@ import { Renderer, GradientUniforms, BlurUniforms, CompositeUniforms } from './r
 // ADD AudioAnalyzer import
 import { AudioAnalyzer } from './audio'; // Adjust path if needed
 
+// ADD Definition for CanvasContexts
+interface CanvasContexts {
+  canvas2d: HTMLCanvasElement;
+  canvasWebGL: HTMLCanvasElement;
+}
+
+// MODIFIED: Wrap Window augmentation in declare global
+declare global {
+  interface Window {
+    showDirectoryPicker(): Promise<FileSystemDirectoryHandle>;
+  }
+}
+
 let frameCount = 0;
 
 // REMOVE WebGL Globals
@@ -69,9 +82,9 @@ let NOISE_AMPLITUDE = 1.2;
 let NOISE_SPEED = 0.4;          // Speed for displacement noise
 let NOISE_SCALE = 1.51; // 5.11, 1.51, 0.33
 let NOISE_OFFSET_SCALE = 0.7;
-let GRID_SCALE = 1.51; 
+let GRID_SCALE = 1.51;
 let GRID_ROTATION = 0.0;
-let GRID_AXIS_SCALE = [2.0, 1.0];
+let GRID_AXIS_SCALE: [number, number] = [2.0, 1.0];
 let GRID_WAVE_SPEED = 0.6;      // EDIT: Added constant for sine wave speed
 
 // --- ADDED: Separate noise parameters for shape displacement ---
@@ -317,14 +330,6 @@ nice with music
 // const PALETTE_COLOR_C = '#261C39'; // Color for opaque black elements
 // const PALETTE_COLOR_D = '#AED4596'; // Color for opaque white elements (unused for now)
 
-// --- MODIFY: Snapshot State (remove animation values) ---
-let snapshotValues = {
-    gridScale: GRID_SCALE, // Initialize with current defaults
-    shapeAmplitude: SHAPE_NOISE_AMPLITUDE, // Base amplitude from slider
-    gradientAmplitude: NOISE_AMPLITUDE,
-    hexagonWidth: HEXAGON_WIDTH
-};
-// --- End Snapshot State ---
 
 
 // ADD Configuration for audio modulation
@@ -381,6 +386,19 @@ let targetGradientColorA = GRADIENT_COLOR_A;
 let targetGradientColorB = GRADIENT_COLOR_B;
 let targetPaletteColorC = PALETTE_COLOR_C;
 let targetPaletteColorD = PALETTE_COLOR_D;
+
+// --- MODIFY: Snapshot State (remove animation values) ---
+let snapshotValues = {
+    gridScale: GRID_SCALE, // Initialize with current defaults
+    shapeAmplitude: SHAPE_NOISE_AMPLITUDE, // Base amplitude from slider
+    gradientAmplitude: NOISE_AMPLITUDE,
+    hexagonWidth: HEXAGON_WIDTH,
+    audioModScale: AUDIO_MOD_SCALE, // ADDED
+    audioSensitivity: AUDIO_SENSITIVITY, // ADDED
+    hfShapeAmount: HIGH_FREQ_SHAPE_NOISE_AMOUNT // ADDED
+};
+// --- End Snapshot State ---
+
 
 export function setup({ /*canvas2d,*/ canvasWebGL }: CanvasContexts) {
     // REMOVE old initWebGL call
@@ -873,7 +891,7 @@ export function start(contexts: CanvasContexts) {
     // Use a button click for this.
     // RENAME the button ID in HTML from 'animate-button' to 'start-audio-button' for clarity
     // Or keep using 'animate-button' if preferred.
-    const startAudioButton = document.getElementById('animate-button'); // Or 'start-audio-button'
+    const startAudioButton = document.getElementById('animate-button') as HTMLButtonElement | null; // Or 'start-audio-button'
     let audioInitialized = false; // Track initialization state
 
     if (startAudioButton) {

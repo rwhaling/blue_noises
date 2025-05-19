@@ -16,7 +16,7 @@ function hexToRgb01(hex: string): [number, number, number] {
 }
 
 // Define interfaces for uniform objects to improve type safety
-interface GradientUniforms {
+export interface GradientUniforms {
     time: number;
     noiseCenter: number;
     noiseWidth: number;
@@ -36,13 +36,13 @@ interface GradientUniforms {
     grainAmplitude: number;
 }
 
-interface BlurUniforms {
+export interface BlurUniforms {
     resolution: [number, number];
     radius: number;
     time: number; // If shader uses it
 }
 
-interface CompositeUniforms {
+export interface CompositeUniforms {
     time: number;
     noiseSpeed: number;
     noiseScale: number;
