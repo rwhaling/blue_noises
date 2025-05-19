@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vite + TS</title>
+    <script type="module" crossorigin src="/assets/index-TBVAjYaB.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CDQy6Jn_.css">
+  </head>
+  <body>
+    <div id="app">
+      <!-- New wrapper for canvas and sliders -->
+      <div id="main-content">
+        <div id="canvas-container">
+          <canvas id="canvas-2d" width="1200" height="900"></canvas>
+          <canvas id="canvas-webgl" width="1200" height="900"></canvas>
+          <!-- Slider container MOVED OUTSIDE canvas-container -->
+        </div>
+        <!-- Slider container MOVED FROM HERE -->
+      </div>
+      <!-- Button container with ALL buttons -->
+      <div id="button-container">
+        <button id="toggle-controls-button" class="control-button">Hide Controls</button>
+        <button id="render-button" class="control-button">Render</button>
+        <button id="animate-button" class="control-button">Animate</button>
+        <button id="palette-button" class="control-button">Palette 1</button>
+        <button id="snapshot-button" class="control-button">Snapshot</button>
+      </div>
+    </div>
+    <!-- Slider container MOVED HERE, outside #app -->
+    <div id="slider-container">
+      <!-- NEW: Wrapper for the columns -->
+      <div id="slider-columns">
+        <!-- Column 1 -->
+        <div class="slider-column">
+          <div class="slider-group">
+            <label for="noise-amplitude-slider">Gradient Amplitude:</label>
+            <input type="range" id="noise-amplitude-slider" min="0" max="200" step="1" value="50">
+            <span id="noise-amplitude-value">0.50</span>
+          </div>
+          <div class="slider-group">
+            <label for="noise-scale-slider">Gradient Scale (Quad):</label>
+            <input type="range" id="noise-scale-slider" min="0" max="100" step="1" value="0">
+            <span id="noise-scale-value">1.00</span>
+          </div>
+          <div class="slider-group">
+            <label for="shape-amplitude-slider">Shape Amplitude:</label>
+            <input type="range" id="shape-amplitude-slider" min="0" max="200" step="1" value="50">
+            <span id="shape-amplitude-value">0.50</span>
+          </div>
+          <div class="slider-group">
+            <label for="shape-scale-slider">Shape Scale (Quad):</label>
+            <input type="range" id="shape-scale-slider" min="0" max="100" step="1" value="0">
+            <span id="shape-scale-value">1.00</span>
+          </div>
+          <div class="slider-group">
+            <label for="hf-shape-amount-slider">HF Shape Amount:</label>
+            <input type="range" id="hf-shape-amount-slider" min="0" max="100" step="1" value="5">
+            <span id="hf-shape-amount-value">0.20</span>
+          </div>
+          <div class="slider-group">
+            <label for="hf-shape-scale-slider">HF Shape Scale (Quad):</label>
+            <input type="range" id="hf-shape-scale-slider" min="0" max="100" step="1" value="70">
+            <span id="hf-shape-scale-value">32.00</span>
+          </div>
+          <!-- MOVED Sliders Start -->
+          <div class="slider-group">
+            <label for="noise-speed-slider">Noise Speed (Shared):</label>
+            <input type="range" id="noise-speed-slider" min="0" max="50" step="0.25" value="8">
+            <span id="noise-speed-value">0.8</span>
+          </div>
+          <div class="slider-group">
+            <label for="grid-scale-slider">Grid Scale (Shared Quad):</label>
+            <input type="range" id="grid-scale-slider" min="0" max="100" step="1" value="22">
+            <span id="grid-scale-value">4.00</span>
+          </div>
+          <div class="slider-group">
+            <label for="grid-wave-speed-slider">Grid Wave Speed:</label>
+            <input type="range" id="grid-wave-speed-slider" min="0" max="400" step="1" value="10">
+            <span id="grid-wave-speed-value">0.10</span>
+          </div>
+          <!-- MOVED Sliders End -->
+          <!-- EDIT: Added Grain Amplitude Slider -->
+        </div> <!-- End Column 1 -->
+
+        <!-- Column 2 -->
+        <div class="slider-column">
+          <div class="slider-group">
+            <label for="audio-mod-scale-slider">Audio Mod Scale (Quad):</label>
+            <input type="range" id="audio-mod-scale-slider" min="0" max="100" step="1" value="25">
+            <span id="audio-mod-scale-value">4.00</span>
+          </div>
+          <div class="slider-group">
+            <label for="audio-sensitivity-slider">Audio Sensitivity:</label>
+            <input type="range" id="audio-sensitivity-slider" min="1" max="200" step="1" value="40">
+            <span id="audio-sensitivity-value">0.1000</span>
+          </div>
+          <div class="slider-group">
+            <label for="grain-amplitude-slider">Grain Amplitude:</label>
+            <input type="range" id="grain-amplitude-slider" min="0" max="50" step="1" value="25">
+            <span id="grain-amplitude-value">0.25</span>
+          </div>
+          <div class="slider-group">
+            <label for="hexagon-pulse-start-slider">Hexagon Position Offset:</label>
+            <input type="range" id="hexagon-pulse-start-slider" min="0" max="1000" step="1" value="0">
+            <span id="hexagon-pulse-start-value">0</span>
+          </div>
+          <div class="slider-group">
+            <label for="hexagon-pulse-width-slider">Hexagon Pulse Width:</label>
+            <input type="range" id="hexagon-pulse-width-slider" min="0" max="600" step="1" value="260">
+            <span id="hexagon-pulse-width-value">260</span>
+          </div>
+          <div class="slider-group">
+            <label for="hexagon-width-slider">Hexagon Width:</label>
+            <input type="range" id="hexagon-width-slider" min="0" max="600" step="1" value="260">
+            <span id="hexagon-width-value">260</span>
+          </div>
+          <div class="slider-group">
+            <label for="hexagon-height-slider">Hexagon Height:</label>
+            <input type="range" id="hexagon-height-slider" min="1" max="450" step="1" value="225">
+            <span id="hexagon-height-value">225</span>
+          </div>
+          <div class="slider-group">
+            <label for="hexagon-pulse-speed-slider">Hexagon Pulse Speed:</label>
+            <input type="range" id="hexagon-pulse-speed-slider" min="0" max="500" step="1" value="0">
+            <span id="hexagon-pulse-speed-value">0.000</span>
+          </div>
+          <div class="slider-group">
+            <label for="pulse-sync-freq-slider">Pulse Sync Freq:</label>
+            <input type="range" id="pulse-sync-freq-slider" min="1" max="50" step="0.1" value="1.0">
+            <span id="pulse-sync-freq-value">1.0</span>
+          </div>
+          <div class="color-input-group">
+            <label for="color-a-input">Color A (Gradient):</label>
+            <input type="text" id="color-a-input" value="#100F0F">
+          </div>
+          <div class="color-input-group">
+            <label for="color-b-input">Color B (Gradient):</label>
+            <input type="text" id="color-b-input" value="#3734DA">
+          </div>
+          <div class="color-input-group">
+            <label for="color-c-input">Color C (Shape Fill):</label>
+            <input type="text" id="color-c-input" value="#C73868">
+          </div>
+          <div class="color-input-group">
+            <label for="color-d-input">Color D (Unused):</label>
+            <input type="text" id="color-d-input" value="#F2585B">
+          </div>
+        </div> <!-- End Column 2 -->
+      </div> <!-- End slider-columns -->
+    </div>
+  </body>
+</html>
